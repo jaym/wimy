@@ -42,6 +42,9 @@ type Effects interface {
 	Prompt(kind PromptKind, choices []string) error
 	// Action runs the named action from the configuration.
 	Action(name string) error
+	// Actions returns the names of the configured actions (for the
+	// Mod-a prompt).
+	Actions() []string
 	// Kill requests that the given window close.
 	Kill(id wm.WindowID)
 	// Quit exits the window manager.
@@ -290,7 +293,7 @@ func cmdSpawn(e *Env, args []string) error {
 
 func cmdAction(e *Env, args []string) error {
 	if len(args) == 0 {
-		return e.Fx.Prompt(PromptAction, nil)
+		return e.Fx.Prompt(PromptAction, e.Fx.Actions())
 	}
 	return e.Fx.Action(args[0])
 }

@@ -84,6 +84,20 @@ func (b *Backend) Action(name string) error {
 	return b.Spawn([]string{"sh", "-c", cmdline})
 }
 
+// Actions returns the sorted names of the configured actions.
+func (b *Backend) Actions() []string {
+	var out []string
+	for name := range b.cfg.Actions {
+		out = append(out, name)
+	}
+	for i := 1; i < len(out); i++ {
+		for j := i; j > 0 && out[j] < out[j-1]; j-- {
+			out[j], out[j-1] = out[j-1], out[j]
+		}
+	}
+	return out
+}
+
 // Kill requests that the window close. Called from within a manage
 // sequence (commands are drained there).
 func (b *Backend) Kill(id wm.WindowID) {

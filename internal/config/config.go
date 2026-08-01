@@ -103,7 +103,9 @@ func Default() *Config {
 		Launcher:   "fuzzel",
 		Menu:       "fuzzel --dmenu",
 		StackStrip: 28,
-		Actions:    map[string]string{},
+		Actions: map[string]string{
+			"quit": "wimyctl quit",
+		},
 	}
 	c.Border.Width = 2
 	c.Border.Focused, _ = ParseColor("#8aadf4")
@@ -333,6 +335,7 @@ func (c *Config) applyNode(n *document.Node) error {
 		c.Binds = append(c.Binds, b)
 
 	case "action":
+		// actions merge with (and can override) the defaults
 		aname, err := strArg(n, 0)
 		if err != nil {
 			return err

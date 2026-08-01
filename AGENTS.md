@@ -122,13 +122,27 @@ go generate ./internal/proto
   window that has no xdg-decoration object at all; it does not mean the
   client answered anything. **Firefox and Zen never bind
   `zxdg_decoration_manager_v1`** (verified with WAYLAND_DEBUG: zero
-  `get_toplevel_decoration` calls, even with
-  `browser.tabs.inTitlebar=0`), so they report hint 0 forever. Nothing
-  can stop such a client drawing its own decorations — `use_ssd` is a
-  no-op for it, since river only calls `setMode()` `if
+  `get_toplevel_decoration` calls), so they report hint 0 forever and
+  `use_ssd` is a no-op for them — river only calls `setMode()` `if
   (toplevel.decoration)`.
-- Suppressing our titlebar for those clients (the obvious reading of
-  hint 0) is wrong twice over: `insetBar` still reserves
+- **But hint 0 does NOT mean the client is incapable of SSD.** Firefox
+  negotiates server-side decorations over the *older KDE* protocol,
+  `org_kde_kwin_server_decoration`, which **river does not implement**
+  (no hits in river's source; wlroots ships
+  `wlr_server_decoration_manager_create()`, river just never calls it —
+  sway does). Verified by running the same Firefox under headless sway
+  vs wimy with WAYLAND_DEBUG:
+  - `browser.tabs.inTitlebar=0` → Firefox `request_mode(2)` (Server);
+    sway answers `mode(2)` and Firefox draws NOTHING → one titlebar.
+    Under river the global is absent, so Firefox falls back to CSD and
+    draws its own titlebar *under* wimy's → two titlebars.
+  - `browser.tabs.inTitlebar=1` → Firefox `request_mode(1)` (None) and
+    draws its window controls into the tab strip; one wimy titlebar
+    plus the tab bar, which looks right. This is the workaround.
+  If river ever gains `org_kde_kwin_server_decoration`, Firefox with
+  `inTitlebar=0` goes SSD on its own and wimy needs no change.
+- Suppressing our titlebar for clients reporting hint 0 (the obvious
+  reading) is wrong twice over: `insetBar` still reserves
   `TitlebarHeight`, so the unreserved strip showed through as a black
   block; and in stack mode the window collapsed to a strip with no
   titlebar to click, making it unreachable. **sway decorates them too**
@@ -185,9 +199,13 @@ go generate ./internal/proto
   river-xkb-config (input device configuration hooks).
 - Multi-seat currently shares one focus.
 - No per-app way to turn a titlebar off. Clients that draw their own
-  CSD (Firefox, Zen, GTK apps) get both theirs and wimy's, same as
-  under sway. If that becomes annoying, add a config rule keyed on
-  app_id rather than resurrecting `decoration_hint` handling.
+  CSD (Firefox, Zen, GTK apps) get both theirs and wimy's. If that
+  becomes annoying, add a config rule keyed on app_id rather than
+  resurrecting `decoration_hint` handling.
+- Upstream: river implements neither `org_kde_kwin_server_decoration`
+  (which Firefox uses — see the decorations section) nor a way to
+  answer a client that requests `client_side` after SSD was configured.
+  Both are river-side, not fixable from the WM.
 - Tiled windows can't be moved between columns by mouse (keyboard only).
 
 ## Style

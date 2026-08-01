@@ -94,6 +94,14 @@ type Window struct {
 	// and get no wimy titlebar.
 	CSDOnly  bool
 	DecoSent bool // use_ssd/use_csd was sent
+	// DecoRefresh/DecoToggle re-assert server-side decorations after
+	// a late decoration negotiation: river only configures the
+	// client when its ssd state CHANGES, so a client creating its
+	// decoration object (or explicitly requesting CSD) after SSD was
+	// configured would never be told server_side. Toggling through
+	// use_csd then use_ssd forces both configures.
+	DecoRefresh bool
+	DecoToggle  bool
 
 	// Titlebar decoration
 	Deco        proto.RiverDecorationV1
@@ -151,6 +159,15 @@ func (w *Window) HandleRiverWindowV1DecorationHint(ctx context.Context, hint uin
 	if only != w.CSDOnly {
 		w.CSDOnly = only
 		w.DecoSent = false // renegotiate at the next manage sequence
+		w.DecoRefresh = false
+		w.DecoToggle = false
+		return
+	}
+	// Any hint means the client is (re)negotiating decorations. If we
+	// already applied SSD, force a re-assert: river does not
+	// re-configure unchanged ssd state (see DecoRefresh).
+	if w.DecoSent {
+		w.DecoRefresh = true
 	}
 }
 

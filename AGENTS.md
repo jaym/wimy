@@ -108,7 +108,13 @@ go generate ./internal/proto
   the intersection) — stack-mode strips use content-clip to 1px.
 - Clients default to CSD: send `use_ssd` to suppress; clients that
   only support CSD report it via `decoration_hint` (they keep CSD and
-  get no wimy titlebar).
+  get no wimy titlebar). River only configures the client when its
+  ssd state CHANGES: a client that creates its xdg-decoration object
+  (or explicitly requests client_side) after SSD was already
+  configured is never told server_side (river/XdgDecoration.zig
+  handleRequestMode only records the hint). Workaround in place: on
+  any decoration_hint after use_ssd, toggle use_csd → use_ssd over two
+  manage sequences (second forced with ManageDirty).
 - `exit_session` ends the WHOLE session (what `wimyctl quit` does);
   signals/`finished` must shut wimy down WITHOUT it (river stays,
   WM-less) — protocol intent.

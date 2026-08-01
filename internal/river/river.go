@@ -489,13 +489,25 @@ func (b *Backend) applyManage() {
 
 	// fullscreen requests
 	for _, w := range b.windows {
-		if !w.DecoSent {
+		switch {
+		case !w.DecoSent:
 			w.DecoSent = true
 			if w.CSDOnly {
 				w.Object.UseCsd()
 			} else {
 				w.Object.UseSsd()
 			}
+		case w.DecoRefresh && w.DecoToggle:
+			// phase 2 of the re-assert: back to SSD
+			w.Object.UseSsd()
+			w.DecoRefresh = false
+			w.DecoToggle = false
+		case w.DecoRefresh:
+			// phase 1: force the state to change (see DecoRefresh)
+			w.Object.UseCsd()
+			w.DecoToggle = true
+			// phase 2 must run in a follow-up manage sequence
+			b.wmg.ManageDirty()
 		}
 		if w.FullscreenReq {
 			w.FullscreenReq = false

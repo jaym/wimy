@@ -69,7 +69,7 @@ func (s *State) layoutOutput(o *Output, placed map[WindowID]bool) []Placement {
 	for ci, c := range v.Columns {
 		w := widths[ci]
 		box := Rect{X: x, Y: area.Y, W: w, H: area.H}
-		out = append(out, s.layoutColumn(v, c, box, o.Name, placed)...)
+		out = append(out, s.layoutColumn(c, box, o.Name, placed)...)
 		x += w
 	}
 
@@ -151,7 +151,7 @@ func columnWidths(cols []*Column, total int32) []int32 {
 }
 
 // layoutColumn computes placements for one column's windows.
-func (s *State) layoutColumn(v *View, c *Column, box Rect, outName string, placed map[WindowID]bool) []Placement {
+func (s *State) layoutColumn(c *Column, box Rect, outName string, placed map[WindowID]bool) []Placement {
 	ids := make([]WindowID, 0, len(c.Windows))
 	for _, id := range c.Windows {
 		if !placed[id] {
@@ -161,7 +161,10 @@ func (s *State) layoutColumn(v *View, c *Column, box Rect, outName string, place
 	if len(ids) == 0 {
 		return nil
 	}
-	focused := v.focusedWindow()
+	// the column's own selection decides what it expands/shows; using
+	// the view's focused window would reset every other column to its
+	// first entry as soon as focus moved away.
+	sel := c.selected()
 	bar := s.TitlebarHeight
 	var out []Placement
 	// put takes the window's full box; the titlebar inset is applied
@@ -202,7 +205,7 @@ func (s *State) layoutColumn(v *View, c *Column, box Rect, outName string, place
 	case ModeStack:
 		fi := 0
 		for i, id := range ids {
-			if id == focused {
+			if id == sel {
 				fi = i
 				break
 			}
@@ -237,7 +240,7 @@ func (s *State) layoutColumn(v *View, c *Column, box Rect, outName string, place
 
 	case ModeMax:
 		for _, id := range ids {
-			put(id, box, false, id != focused, 0)
+			put(id, box, false, id != sel, 0)
 		}
 	}
 	return out

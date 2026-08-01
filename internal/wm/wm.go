@@ -209,12 +209,12 @@ func (s *State) FocusDir(d Direction) {
 			v.FocusCol++
 		}
 	case DirUp:
-		if v.FocusRow > 0 {
-			v.FocusRow--
+		if c := v.focusedColumn(); c != nil && c.Sel > 0 {
+			c.Sel--
 		}
 	case DirDown:
-		if c := v.Columns[v.FocusCol]; v.FocusRow < len(c.Windows)-1 {
-			v.FocusRow++
+		if c := v.focusedColumn(); c != nil && c.Sel < len(c.Windows)-1 {
+			c.Sel++
 		}
 	}
 	v.clampFocus()
@@ -287,11 +287,12 @@ func (s *State) MoveDir(d Direction) {
 		return
 	}
 	id := s.Focused
-	col, row := v.FocusCol, v.FocusRow
+	col := v.FocusCol
 	if col < 0 || col >= len(v.Columns) {
 		return
 	}
 	c := v.Columns[col]
+	row := c.Sel
 	if row < 0 || row >= len(c.Windows) || c.Windows[row] != id {
 		return
 	}
@@ -299,12 +300,12 @@ func (s *State) MoveDir(d Direction) {
 	case DirUp:
 		if row > 0 {
 			c.Windows[row], c.Windows[row-1] = c.Windows[row-1], c.Windows[row]
-			v.FocusRow--
+			c.Sel--
 		}
 	case DirDown:
 		if row < len(c.Windows)-1 {
 			c.Windows[row], c.Windows[row+1] = c.Windows[row+1], c.Windows[row]
-			v.FocusRow++
+			c.Sel++
 		}
 	case DirLeft, DirRight:
 		delta := -1
@@ -338,7 +339,8 @@ func (s *State) MoveDir(d Direction) {
 			tc.Windows = append(tc.Windows, id)
 		}
 		v.FocusCol = target
-		v.FocusRow = len(v.Columns[target].Windows) - 1
+		// the target column selects the window that just arrived
+		v.Columns[target].Sel = len(v.Columns[target].Windows) - 1
 	}
 	v.clampFocus()
 	s.refocus()
@@ -364,7 +366,7 @@ func (s *State) ToggleFloat() {
 		v.clampFocus()
 		c := v.Columns[v.FocusCol]
 		c.Windows = append(c.Windows, id)
-		v.FocusRow = len(c.Windows) - 1
+		c.Sel = len(c.Windows) - 1
 	} else {
 		// tiled -> float
 		v.removeFromView(id)

@@ -100,6 +100,23 @@ check "hover over collapsed strip does not focus" "$(focused)" 1
 sleep 0.5
 check "click on collapsed strip focuses" "$(focused)" 2
 
+# --- a stack column keeps its own selection when focus leaves it ---
+# column 1 holds windows 1,2,3 stacked; window 4 goes to column 2.
+# Focusing across columns must not re-expand column 1's first window.
+ctl run 'spawn foot' >/dev/null; sleep 1.5   # window 3 -> column 1
+ctl run 'spawn foot' >/dev/null; sleep 1.5   # window 4 -> column 1
+ctl run 'move right' >/dev/null; sleep 0.4   # window 4 -> new column 2
+check "setup: stacked column plus a second column" "$(ctl state | jq '.views[0].columns')" 2
+ctl run 'focus-window 2' >/dev/null; sleep 0.4  # expand the MIDDLE window
+winy() { ctl state | jq -r --argjson id "$1" '[.windows[] | select(.id==$id)][0].rect.Y'; }
+Y_EXPANDED=$(winy 2)
+# hover into column 2: focus leaves the stacked column
+P4=$(wincenter 4)
+./bin/ptrinject -from "$P4" -to "${P4%,*},$(( ${P4#*,} + 15 ))" -button none
+sleep 0.5
+check "hover focuses the window in the other column" "$(focused)" 4
+check "stack column keeps its selected window expanded" "$(winy 2)" "$Y_EXPANDED"
+
 kill $RIVER_PID 2>/dev/null; wait $RIVER_PID 2>/dev/null
 echo "== mouse PASS=$PASS FAIL=$FAIL =="
 [ "$FAIL" = 0 ]

@@ -120,6 +120,67 @@ func TestStackModeTitlebars(t *testing.T) {
 	}
 }
 
+// twoColumns builds col0 = [1,2,3] and col1 = [4], focus on 4.
+func twoColumns(t *testing.T) *State {
+	t.Helper()
+	s := newTestState(t)
+	s.AddWindow(2, false)
+	s.AddWindow(3, false)
+	s.AddWindow(4, false)
+	s.MoveDir(DirRight) // window 4 into a new column
+	v := s.activeView()
+	if len(v.Columns) != 2 || len(v.Columns[0].Windows) != 3 {
+		t.Fatalf("setup wrong: %d columns, col0=%v", len(v.Columns), v.Columns[0].Windows)
+	}
+	return s
+}
+
+func TestStackColumnKeepsSelectionWhenFocusLeaves(t *testing.T) {
+	s := twoColumns(t)
+	s.FocusWindow(2) // middle of the stack column
+	s.SetMode(ModeStack)
+	if p := placements(s); p[2].Collapsed {
+		t.Fatalf("window 2 should be the expanded one: %+v", p[2])
+	}
+	// focus moves to the other column (mouse hover/click both land here)
+	s.FocusWindow(4)
+	p := placements(s)
+	if p[2].Collapsed {
+		t.Errorf("stack column must keep window 2 expanded, not reset to the first window")
+	}
+	if !p[1].Collapsed || !p[3].Collapsed {
+		t.Errorf("windows 1 and 3 should stay collapsed: 1=%+v 3=%+v", p[1], p[3])
+	}
+}
+
+func TestMaxColumnKeepsSelectionWhenFocusLeaves(t *testing.T) {
+	s := twoColumns(t)
+	s.FocusWindow(2)
+	s.SetMode(ModeMax)
+	s.FocusWindow(4)
+	p := placements(s)
+	if p[2].Hidden {
+		t.Errorf("max column must keep showing window 2 when focus leaves the column")
+	}
+	if !p[1].Hidden || !p[3].Hidden {
+		t.Errorf("only the column's selected window should be visible: 1=%+v 3=%+v", p[1], p[3])
+	}
+}
+
+func TestFocusAcrossColumnsRestoresColumnSelection(t *testing.T) {
+	s := twoColumns(t) // col0 = [1,2,3], col1 = [4]
+	s.FocusWindow(2)   // col0 selects its middle window
+	s.FocusWindow(4)   // focus leaves for col1
+	s.FocusDir(DirLeft)
+	if s.Focused != 2 {
+		t.Errorf("focus left should restore col0's selection (2), got %d", s.Focused)
+	}
+	s.FocusDir(DirRight)
+	if s.Focused != 4 {
+		t.Errorf("focus right should restore col1's selection (4), got %d", s.Focused)
+	}
+}
+
 func TestHoverable(t *testing.T) {
 	s := newTestState(t)
 	s.AddWindow(2, false) // focused: 2; column order: 1,2

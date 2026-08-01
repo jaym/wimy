@@ -83,6 +83,14 @@ go generate ./internal/proto
 5. **Model is the source of truth**: the backend translates model state
    to protocol requests every sequence; don't stash layout-relevant
    state in the backend that isn't in the model.
+6. **Every column owns its selection** (`Column.Sel`), and the view only
+   tracks which column is focused (`View.FocusCol`). The solver must
+   pick a column's expanded (stack) / visible (max) window from that
+   column's own `Sel` — never from `View.focusedWindow()`, which
+   belongs to whichever column has focus and would collapse every other
+   column back to its first entry the moment focus moved away. Focusing
+   across columns therefore restores the target column's selection
+   (wmii does the same) rather than reusing the previous row index.
 
 ## Protocol gotchas (learned from real bugs — read before touching
 `internal/river`)

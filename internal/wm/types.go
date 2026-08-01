@@ -114,6 +114,29 @@ type Column struct {
 	Windows []WindowID // top to bottom
 	Mode    Mode
 	Factor  float64 // 1.0 == equal share of the usable width
+	// Sel is the index of the column's selected window: the one shown
+	// expanded in stack mode and the only visible one in max mode.
+	// Every column keeps its own, so moving focus to another column
+	// leaves this one's arrangement untouched (wmii does the same).
+	Sel int
+}
+
+// selected returns the column's selected window, or 0 if it is empty.
+func (c *Column) selected() WindowID {
+	if c.Sel >= 0 && c.Sel < len(c.Windows) {
+		return c.Windows[c.Sel]
+	}
+	return 0
+}
+
+// clampSel keeps the selection index within the column.
+func (c *Column) clampSel() {
+	if c.Sel >= len(c.Windows) {
+		c.Sel = len(c.Windows) - 1
+	}
+	if c.Sel < 0 {
+		c.Sel = 0
+	}
 }
 
 // View is a named tag view: every window whose tag set contains the
@@ -124,9 +147,17 @@ type View struct {
 	Float   []WindowID // bottom to top
 
 	FocusCol   int
-	FocusRow   int
 	FocusFloat int
 	FocusLayer Layer
+}
+
+// focusedColumn returns the view's focused column, or nil if the view
+// has none.
+func (v *View) focusedColumn() *Column {
+	if v.FocusCol >= 0 && v.FocusCol < len(v.Columns) {
+		return v.Columns[v.FocusCol]
+	}
+	return nil
 }
 
 // FocusedWindow returns the window the view's focus markers point
@@ -142,11 +173,8 @@ func (v *View) focusedWindow() WindowID {
 		}
 		return 0
 	}
-	if v.FocusCol >= 0 && v.FocusCol < len(v.Columns) {
-		c := v.Columns[v.FocusCol]
-		if v.FocusRow >= 0 && v.FocusRow < len(c.Windows) {
-			return c.Windows[v.FocusRow]
-		}
+	if c := v.focusedColumn(); c != nil {
+		return c.selected()
 	}
 	return 0
 }
@@ -341,6 +369,10 @@ func (v *View) removeFromView(id WindowID) (wasFocused bool) {
 				continue
 			}
 			c.Windows = append(c.Windows[:ri], c.Windows[ri+1:]...)
+			if c.Sel > ri {
+				// keep the column pointing at the same window
+				c.Sel--
+			}
 			if len(c.Windows) == 0 {
 				v.Columns = append(v.Columns[:ci], v.Columns[ci+1:]...)
 			}
@@ -364,7 +396,6 @@ func (v *View) clampFocus() {
 	if len(v.Columns) == 0 {
 		v.Columns = []*Column{{Mode: ModeDefault, Factor: 1}}
 		v.FocusCol = 0
-		v.FocusRow = 0
 		if v.FocusLayer == LayerTiled {
 			// column is empty; focus moves to float if any
 			if len(v.Float) > 0 {
@@ -378,11 +409,9 @@ func (v *View) clampFocus() {
 	if v.FocusCol < 0 {
 		v.FocusCol = 0
 	}
-	if c := v.Columns[v.FocusCol]; v.FocusRow >= len(c.Windows) {
-		v.FocusRow = len(c.Windows) - 1
-	}
-	if v.FocusRow < 0 {
-		v.FocusRow = 0
+	// every column keeps its own selection, so clamp them all
+	for _, c := range v.Columns {
+		c.clampSel()
 	}
 	if v.FocusFloat >= len(v.Float) {
 		v.FocusFloat = len(v.Float) - 1
@@ -426,7 +455,8 @@ func (v *View) focusWindow(id WindowID) {
 	for ci, c := range v.Columns {
 		for ri, w := range c.Windows {
 			if w == id {
-				v.FocusCol, v.FocusRow = ci, ri
+				v.FocusCol = ci
+				c.Sel = ri
 				v.FocusLayer = LayerTiled
 				return
 			}

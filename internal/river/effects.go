@@ -33,7 +33,7 @@ func (b *Backend) SpawnTerminal() error {
 
 // SpawnMenu starts the configured program launcher.
 func (b *Backend) SpawnMenu() error {
-	return b.Spawn(strings.Fields(b.cfg.Menu))
+	return b.Spawn(strings.Fields(b.cfg.Launcher))
 }
 
 // Prompt runs the configured menu program in dmenu mode with the given

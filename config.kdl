@@ -10,10 +10,11 @@
 // wmii used Mod1; the default is Mod4.
 mod "Mod4"
 
-// Programs. `menu` is used both as the program launcher (Mod-p) and
-// for tag/action prompts; it must read choices on stdin and print the
-// selection on stdout, dmenu-style.
+// Programs. `launcher` is the program launcher (Mod-p). `menu` is
+// used for tag/action prompts; it must read choices on stdin and
+// print the selection on stdout, dmenu-style.
 terminal "alacritty"
+launcher "fuzzel"
 menu "fuzzel --dmenu"
 
 // Focus borders drawn by the compositor.
@@ -24,9 +25,16 @@ stack-strip 28
 
 // --- key bindings ---------------------------------------------------
 // Mod refers to the primary modifier; Shift, Ctrl, Alt and Super are
-// also recognized. Keys are single characters or names: Return, space,
-// Tab, Escape, BackSpace, Delete, Home, End, Page_Up, Page_Down,
+// also recognized. Keys are single characters (the PHYSICAL key — use
+// "Mod-Shift-c", not "Mod-Shift-C") or names: Return, space, Tab,
+// Escape, BackSpace, Delete, Home, End, Page_Up, Page_Down,
 // Left, Up, Right, Down, F1..F12.
+// Note: bindings match modifiers exactly; they do not fire while
+// NumLock or CapsLock is active.
+//
+// The defaults below apply automatically as long as your config file
+// declares NO bind of its own. Once you declare any bind, all defaults
+// are replaced — re-declare the ones you want to keep.
 
 bind "Mod-Return" { spawn-terminal; }
 bind "Mod-p" { spawn-menu; }

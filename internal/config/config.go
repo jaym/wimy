@@ -66,14 +66,16 @@ type Bind struct {
 	Command string // e.g. "focus left"
 }
 
-// Modifier masks, mirroring river_seat_v1.modifiers.
+// Modifier masks, mirroring the river_seat_v1.modifiers enum.
+// Note the gaps: 2 is capslock and 16 is numlock, which river and
+// wlroots use internally but are not part of the enum.
 const (
-	ModShift uint32 = 1 << 0
-	ModCtrl  uint32 = 1 << 2
-	Mod1     uint32 = 1 << 3 // Alt
-	Mod3     uint32 = 1 << 4
-	Mod4     uint32 = 1 << 5 // Super/Logo
-	Mod5     uint32 = 1 << 6
+	ModShift uint32 = 1
+	ModCtrl  uint32 = 4
+	Mod1     uint32 = 8 // Alt
+	Mod3     uint32 = 32
+	Mod4     uint32 = 64 // Super/Logo
+	Mod5     uint32 = 128
 )
 
 // Config is the resolved wimy configuration.
@@ -81,7 +83,8 @@ type Config struct {
 	Mod        string // name of the primary modifier: Mod1..Mod5 (default Mod4)
 	ModMask    uint32 // mask of the primary modifier
 	Terminal   string
-	Menu       string // dmenu-compatible launcher
+	Launcher   string // program launcher (Mod-p)
+	Menu       string // dmenu-compatible prompter (tag/action prompts)
 	Border     Border
 	StackStrip int32
 	Binds      []Bind
@@ -97,6 +100,7 @@ func Default() *Config {
 		Mod:        "Mod4",
 		ModMask:    Mod4,
 		Terminal:   "alacritty",
+		Launcher:   "fuzzel",
 		Menu:       "fuzzel --dmenu",
 		StackStrip: 28,
 		Actions:    map[string]string{},
@@ -180,7 +184,19 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
-	c.Binds = nil // user config replaces the default bindings
+	// The default bindings are replaced only if the config declares
+	// at least one bind of its own; a config that only sets options
+	// keeps the defaults.
+	hasBinds := false
+	for _, n := range doc.Nodes {
+		if name, _ := n.Name.Value.(string); name == "bind" {
+			hasBinds = true
+			break
+		}
+	}
+	if hasBinds {
+		c.Binds = nil
+	}
 	for _, n := range doc.Nodes {
 		if err := c.applyNode(n); err != nil {
 			return nil, fmt.Errorf("%s: %w", path, err)
@@ -243,6 +259,13 @@ func (c *Config) applyNode(n *document.Node) error {
 			return err
 		}
 		c.Terminal = t
+
+	case "launcher":
+		l, err := strArg(n, 0)
+		if err != nil {
+			return err
+		}
+		c.Launcher = l
 
 	case "menu":
 		m, err := strArg(n, 0)
@@ -378,7 +401,7 @@ func (c *Config) parseBind(combo, cmd string) (Bind, error) {
 			return b, fmt.Errorf("bind %q: unknown modifier %q", combo, m)
 		}
 	}
-	sym, err := parseKeysym(key, b.Mods&ModShift != 0)
+	sym, err := parseKeysym(key)
 	if err != nil {
 		return b, fmt.Errorf("bind %q: %w", combo, err)
 	}
@@ -404,20 +427,18 @@ var namedKeysyms = map[string]uint32{
 	"f9": 0xffc6, "f10": 0xffc7, "f11": 0xffc8, "f12": 0xffc9,
 }
 
-// parseKeysym resolves a key token to a keysym. Single characters map
-// to their Latin-1 keysym; if Shift is held and the character is a
-// lowercase ASCII letter, the uppercase keysym is used (pressing
-// Shift+h produces the keysym H).
-func parseKeysym(key string, shifted bool) (uint32, error) {
+// parseKeysym resolves a key token to a keysym. Single characters
+// map to their literal Latin-1 keysym: combos name the PHYSICAL key,
+// not the shifted symbol — river matches bindings against the
+// base-layer keysym plus the full modifier mask, so "Mod-Shift-c"
+// must use keysym 'c', not 'C'.
+func parseKeysym(key string) (uint32, error) {
 	if sym, ok := namedKeysyms[strings.ToLower(key)]; ok {
 		return sym, nil
 	}
 	runes := []rune(key)
 	if len(runes) == 1 {
 		r := runes[0]
-		if shifted && r >= 'a' && r <= 'z' {
-			r -= 'a' - 'A'
-		}
 		if r > 0xff {
 			return 0, fmt.Errorf("key %q is outside the Latin-1 range", key)
 		}

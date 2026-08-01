@@ -6,9 +6,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"wimy/internal/config"
@@ -18,7 +20,19 @@ import (
 
 func main() {
 	configPath := flag.String("config", "", "path to config.kdl (default ~/.config/wimy/config.kdl)")
+	logPath := flag.String("log", "", "log file (default $XDG_RUNTIME_DIR/wimy-$WAYLAND_DISPLAY.log)")
 	flag.Parse()
+
+	// log to a file as well as stderr: on a TTY river's stderr is
+	// invisible once the session starts
+	if *logPath == "" {
+		*logPath = strings.TrimSuffix(rpc.SocketPath(), ".sock") + ".log"
+	}
+	if f, err := os.OpenFile(*logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
+		log.SetOutput(io.MultiWriter(os.Stderr, f))
+		defer f.Close()
+	}
+	log.Printf("wimy: starting (log: %s)", *logPath)
 
 	cfg, err := config.Load(*configPath)
 	if err != nil {

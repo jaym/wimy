@@ -16,9 +16,7 @@ func paddedSize(l int) int { return l + (-l)&3 }
 func As[T ~struct {
 	_   raw.Marker[T]
 	raw *raw.Object
-}](o wlcl.Object) T {
-	return T{raw: o}
-}
+}](o wlcl.Object) T { return T{raw: o} }
 
 // CreateDisplay is equivalent to [As][[WlDisplay]](conn.Init([Interfaces]))
 func CreateDisplay(conn *wlcl.Connection) WlDisplay { return As[WlDisplay](conn.Init(Interfaces)) }
@@ -9465,6 +9463,222 @@ var interfaceRiverXkbBindingsSeatV1 = raw.Interface{
 	UnmarshalEvent: unmarshalEventRiverXkbBindingsSeatV1,
 }
 
+// ../../protocol/wlr-virtual-keyboard-unstable-v1.xml
+
+// Copyright © 2008-2011  Kristian Høgsberg
+// Copyright © 2010-2013  Intel Corporation
+// Copyright © 2012-2013  Collabora, Ltd.
+// Copyright © 2018       Purism SPC
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice (including the next
+// paragraph) shall be included in all copies or substantial portions of the
+// Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+
+// The virtual keyboard provides an application with requests which emulate
+// the behaviour of a physical keyboard.
+//
+// This interface can be used by clients on its own to provide raw input
+// events, or it can accompany the input method protocol.
+type ZwpVirtualKeyboardV1 struct {
+	_   raw.Marker[ZwpVirtualKeyboardV1]
+	raw *raw.Object
+}
+
+// Conn returns the underlying connection.
+func (o ZwpVirtualKeyboardV1) Conn() *wlcl.Connection { return (*wlcl.Connection)(o.raw.Conn()) }
+
+// IsSet returns true if the object is valid (non-zero).
+func (o ZwpVirtualKeyboardV1) IsSet() bool { return o.raw != nil }
+
+// Version returns the object's version.
+func (o ZwpVirtualKeyboardV1) Version() uint32 { return o.raw.Version() }
+
+// UserData returns the object's user data.
+func (o ZwpVirtualKeyboardV1) UserData() ZwpVirtualKeyboardV1Data {
+	data, _ := o.raw.UserData().(ZwpVirtualKeyboardV1Data)
+	return data
+}
+
+// SetUserData sets the object's user data.
+func (o ZwpVirtualKeyboardV1) SetUserData(v ZwpVirtualKeyboardV1Data) { o.raw.SetUserData(v) }
+
+// Provide a file descriptor to the compositor which can be
+// memory-mapped to provide a keyboard mapping description.
+//
+// Format carries a value from the keymap_format enumeration.
+func (o ZwpVirtualKeyboardV1) Keymap(format uint32, fd int, size uint32) {
+	conn := o.raw.Conn()
+	conn.SendRequest(o.raw, 0, func() (args []byte, fds []int) {
+		args = make([]byte, 0, 8)
+		fds = make([]int, 0, 1)
+		args = conn.MarshalUint(args, format)
+		fds = conn.MarshalFD(fds, fd)
+		args = conn.MarshalUint(args, size)
+		return
+	})
+	return
+}
+
+// A key was pressed or released.
+// The time argument is a timestamp with millisecond granularity, with an
+// undefined base. All requests regarding a single object must share the
+// same clock.
+//
+// Keymap must be set before issuing this request.
+//
+// State carries a value from the key_state enumeration.
+func (o ZwpVirtualKeyboardV1) Key(time uint32, key uint32, state uint32) {
+	conn := o.raw.Conn()
+	conn.SendRequest(o.raw, 1, func() (args []byte, fds []int) {
+		args = make([]byte, 0, 12)
+		args = conn.MarshalUint(args, time)
+		args = conn.MarshalUint(args, key)
+		args = conn.MarshalUint(args, state)
+		return
+	})
+	return
+}
+
+// Notifies the compositor that the modifier and/or group state has
+// changed, and it should update state.
+//
+// The client should use wl_keyboard.modifiers event to synchronize its
+// internal state with seat state.
+//
+// Keymap must be set before issuing this request.
+func (o ZwpVirtualKeyboardV1) Modifiers(modsDepressed uint32, modsLatched uint32, modsLocked uint32, group uint32) {
+	conn := o.raw.Conn()
+	conn.SendRequest(o.raw, 2, func() (args []byte, fds []int) {
+		args = make([]byte, 0, 16)
+		args = conn.MarshalUint(args, modsDepressed)
+		args = conn.MarshalUint(args, modsLatched)
+		args = conn.MarshalUint(args, modsLocked)
+		args = conn.MarshalUint(args, group)
+		return
+	})
+	return
+}
+
+func (o ZwpVirtualKeyboardV1) Destroy() {
+	conn := o.raw.Conn()
+	conn.SendRequest(o.raw, 3, func() (args []byte, fds []int) {
+		o.raw.Destroy()
+		return
+	})
+	return
+}
+
+type ZwpVirtualKeyboardV1Data interface {
+}
+
+type ZwpVirtualKeyboardV1Stub struct{}
+
+func unmarshalEventZwpVirtualKeyboardV1(o *raw.Object, op uint16, args []byte, fds []int) (raw.HandleEventFunc, error) {
+	switch op {
+	default:
+		return nil, fmt.Errorf("zwp_virtual_keyboard_v1: invalid event opcode %d", op)
+	}
+}
+
+const ZwpVirtualKeyboardV1Name = "zwp_virtual_keyboard_v1"
+
+var interfaceZwpVirtualKeyboardV1 = raw.Interface{
+	Name:           "zwp_virtual_keyboard_v1",
+	Requests:       []string{"keymap", "key", "modifiers", "destroy"},
+	Events:         []string{},
+	EventsFDs:      []int{},
+	UnmarshalEvent: unmarshalEventZwpVirtualKeyboardV1,
+}
+
+const (
+	ZwpVirtualKeyboardV1ErrorNoKeymap = 0
+)
+
+// A virtual keyboard manager allows an application to provide keyboard
+// input events as if they came from a physical keyboard.
+type ZwpVirtualKeyboardManagerV1 struct {
+	_   raw.Marker[ZwpVirtualKeyboardManagerV1]
+	raw *raw.Object
+}
+
+// Conn returns the underlying connection.
+func (o ZwpVirtualKeyboardManagerV1) Conn() *wlcl.Connection { return (*wlcl.Connection)(o.raw.Conn()) }
+
+// IsSet returns true if the object is valid (non-zero).
+func (o ZwpVirtualKeyboardManagerV1) IsSet() bool { return o.raw != nil }
+
+// Version returns the object's version.
+func (o ZwpVirtualKeyboardManagerV1) Version() uint32 { return o.raw.Version() }
+
+// UserData returns the object's user data.
+func (o ZwpVirtualKeyboardManagerV1) UserData() ZwpVirtualKeyboardManagerV1Data {
+	data, _ := o.raw.UserData().(ZwpVirtualKeyboardManagerV1Data)
+	return data
+}
+
+// SetUserData sets the object's user data.
+func (o ZwpVirtualKeyboardManagerV1) SetUserData(v ZwpVirtualKeyboardManagerV1Data) {
+	o.raw.SetUserData(v)
+}
+
+// Creates a new virtual keyboard associated to a seat.
+//
+// If the compositor enables a keyboard to perform arbitrary actions, it
+// should present an error when an untrusted client requests a new
+// keyboard.
+func (o ZwpVirtualKeyboardManagerV1) CreateVirtualKeyboard(seat WlSeat) ZwpVirtualKeyboardV1 {
+	conn := o.raw.Conn()
+	var id *raw.Object
+	conn.SendRequest(o.raw, 0, func() (args []byte, fds []int) {
+		args = make([]byte, 0, 8)
+		args = conn.MarshalObject(args, seat.raw)
+		id, args = conn.MarshalNewID(args, &interfaceZwpVirtualKeyboardV1, o.raw.Version())
+		return
+	})
+	return As[ZwpVirtualKeyboardV1](id)
+}
+
+type ZwpVirtualKeyboardManagerV1Data interface {
+}
+
+type ZwpVirtualKeyboardManagerV1Stub struct{}
+
+func unmarshalEventZwpVirtualKeyboardManagerV1(o *raw.Object, op uint16, args []byte, fds []int) (raw.HandleEventFunc, error) {
+	switch op {
+	default:
+		return nil, fmt.Errorf("zwp_virtual_keyboard_manager_v1: invalid event opcode %d", op)
+	}
+}
+
+const ZwpVirtualKeyboardManagerV1Name = "zwp_virtual_keyboard_manager_v1"
+
+var interfaceZwpVirtualKeyboardManagerV1 = raw.Interface{
+	Name:           "zwp_virtual_keyboard_manager_v1",
+	Requests:       []string{"create_virtual_keyboard"},
+	Events:         []string{},
+	EventsFDs:      []int{},
+	UnmarshalEvent: unmarshalEventZwpVirtualKeyboardManagerV1,
+}
+
+const (
+	ZwpVirtualKeyboardManagerV1ErrorUnauthorized = 0
+)
+
 func Interfaces(name string) *raw.Interface {
 	switch name {
 	case "wl_display":
@@ -9535,6 +9749,10 @@ func Interfaces(name string) *raw.Interface {
 		return &interfaceRiverXkbBindingV1
 	case "river_xkb_bindings_seat_v1":
 		return &interfaceRiverXkbBindingsSeatV1
+	case "zwp_virtual_keyboard_v1":
+		return &interfaceZwpVirtualKeyboardV1
+	case "zwp_virtual_keyboard_manager_v1":
+		return &interfaceZwpVirtualKeyboardManagerV1
 	}
 	return nil
 }

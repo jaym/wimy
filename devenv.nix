@@ -12,6 +12,7 @@
     pkgs.fuzzel # launcher for testing
     pkgs.foot # shm-rendered terminal, for headless tests (alacritty needs GL)
     pkgs.jq # for e2e.sh assertions
+    pkgs.libxkbcommon # xkbcli, for keymap generation in e2e tests
   ];
 
   # https://devenv.sh/languages/

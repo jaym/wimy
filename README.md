@@ -128,6 +128,26 @@ KDL (`~/.config/wimy/config.kdl`); see the annotated [`config.kdl`](config.kdl)
 in this repo. Inside single-line blocks, end the command with `;`:
 `bind "Mod-h" { focus "left"; }`.
 
+`launcher` is the Mod-p program launcher, `menu` the dmenu-style
+prompter used for tag/action prompts.
+
+Binding notes (inherited from river's matching semantics):
+
+- Combos name the **physical key**: `bind "Mod-Shift-c"`, not
+  `Mod-Shift-C`.
+- Modifiers must match exactly — bindings do not fire while **NumLock
+  or CapsLock** is active.
+- A config file that declares no `bind` of its own keeps the default
+  bindings; declaring any `bind` replaces them all.
+
+## Troubleshooting
+
+wimy logs to `$XDG_RUNTIME_DIR/wimy-$WAYLAND_DISPLAY.log` in addition
+to stderr (`-log` overrides). Check there first if wimy seems not to
+be running (e.g. black screen, no bindings): a missing
+`river_window_manager_v1` global means the compositor is river-classic
+(0.3.x), not river 0.4+.
+
 ## Current limitations
 
 - Mouse support (Mod+drag move/resize, click focus) is not implemented
@@ -144,6 +164,7 @@ in this repo. Inside single-line blocks, end the command with `;`:
 go test ./...           # unit tests (model, config)
 ./e2e.sh                # end-to-end: headless river + wimy via wimyctl
 ./e2e-multi.sh          # end-to-end with two headless outputs
+./e2e-keys.sh           # end-to-end keybindings via virtual keyboard
 ```
 
 The e2e scripts use foot for client windows because it renders via

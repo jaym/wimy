@@ -58,8 +58,8 @@ autostart {
 	if c.Binds[0].Mods != Mod1 || c.Binds[0].Keysym != 0xff0d || c.Binds[0].Command != "spawn foot" {
 		t.Errorf("bind 0: %+v", c.Binds[0])
 	}
-	// Shift lowercase letter -> uppercase keysym
-	if c.Binds[1].Keysym != 'Q' || c.Binds[1].Mods != Mod1|ModShift {
+	// Shift combo uses the physical (lowercase) keysym
+	if c.Binds[1].Keysym != 'q' || c.Binds[1].Mods != Mod1|ModShift {
 		t.Errorf("bind 1: %+v", c.Binds[1])
 	}
 	// explicit Super
@@ -103,10 +103,10 @@ func TestDefaultsHaveWmiiBindings(t *testing.T) {
 			t.Errorf("missing default binding %q", combo)
 		}
 	}
-	// Mod-Shift-h must produce uppercase H with Mod4|Shift
+	// Mod-Shift-h must use the physical keysym h with Mod4|Shift
 	for _, b := range c.Binds {
 		if b.Combo == "Mod-Shift-h" {
-			if b.Keysym != 'H' || b.Mods != Mod4|ModShift {
+			if b.Keysym != 'h' || b.Mods != Mod4|ModShift {
 				t.Errorf("Mod-Shift-h: keysym=%x mods=%x", b.Keysym, b.Mods)
 			}
 		}

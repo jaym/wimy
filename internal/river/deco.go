@@ -56,9 +56,11 @@ func (b *Backend) renderTitlebar(w *Window, p wm.Placement) {
 	}
 	if !w.Deco.IsSet() {
 		surf := b.comp.CreateSurface()
-		region := b.comp.CreateRegion() // empty: no input on titlebars
-		surf.SetInputRegion(region)
-		region.Destroy()
+		// No input region is set: the spec default (whole
+		// surface) applies, so the titlebar counts as part of
+		// the window's area for river's pointer_enter and
+		// window_interaction routing (hover titlebar = hover
+		// window; clicking a stack strip focuses it).
 		w.DecoSurface = surf
 		w.Deco = w.Object.GetDecorationAbove(surf)
 	}

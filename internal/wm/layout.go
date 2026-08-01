@@ -37,6 +37,20 @@ func (s *State) Layout() []Placement {
 	return out
 }
 
+// Hoverable reports whether the window may be focused by hovering:
+// it has a visible placement that is not a collapsed stack-mode
+// strip. Collapsed strips require a click, otherwise the pointer
+// passing over the strips lining a stack column would flip focus
+// (and expand a window) on every crossing.
+func (s *State) Hoverable(id WindowID) bool {
+	for _, p := range s.Layout() {
+		if p.ID == id {
+			return !p.Hidden && !p.Collapsed
+		}
+	}
+	return false
+}
+
 // layoutOutput computes the placements of windows rendered on the
 // given output. Windows already placed on an earlier output (per the
 // placed set) are skipped.

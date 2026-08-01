@@ -86,6 +86,20 @@ check "hover focuses floating window" "$(focused)" 2
 ctl run 'focus-window 1' >/dev/null; sleep 0.3
 check "keyboard focus wins over resting pointer" "$(focused)" 1
 
+# --- stack mode: a collapsed strip needs a click, not a hover ---
+ctl run 'focus-window 2' >/dev/null; sleep 0.2
+ctl run 'toggle-float' >/dev/null; sleep 0.3   # 2 back to tiled, focused
+ctl run 'mode stack' >/dev/null; sleep 0.2
+ctl run 'focus-window 1' >/dev/null; sleep 0.3 # 2 collapses to a strip
+# the visible strip is the titlebar just above the (clipped) content rect
+STRIP=$(ctl state | jq -r '[.windows[] | select(.id==2)][0].rect | "\(.X + (.W/2|floor)),\(.Y - 10)"')
+./bin/ptrinject -from "$STRIP" -to "${STRIP%,*},$(( ${STRIP#*,} + 4 ))" -button none
+sleep 0.5
+check "hover over collapsed strip does not focus" "$(focused)" 1
+./bin/ptrinject -from "$STRIP" -to "${STRIP%,*},$(( ${STRIP#*,} + 4 ))" -button left
+sleep 0.5
+check "click on collapsed strip focuses" "$(focused)" 2
+
 kill $RIVER_PID 2>/dev/null; wait $RIVER_PID 2>/dev/null
 echo "== mouse PASS=$PASS FAIL=$FAIL =="
 [ "$FAIL" = 0 ]

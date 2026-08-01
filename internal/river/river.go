@@ -440,9 +440,12 @@ func (b *Backend) syncModel() {
 			// moves a window under a resting pointer, and those
 			// must not steal focus from keyboard-driven changes.
 			// Interactive ops are excluded too so a drag crossing
-			// other windows doesn't steal focus.
+			// other windows doesn't steal focus. Collapsed stack
+			// strips are not hoverable: focusing them requires a
+			// click (window_interaction), else the pointer passing
+			// over the column's strips would flip focus each time.
 			moved := s.PointerX != s.LastX || s.PointerY != s.LastY
-			if b.cfg.FocusFollowsMouse && moved && s.Op == nil && w.ID != b.state.Focused {
+			if b.cfg.FocusFollowsMouse && moved && s.Op == nil && w.ID != b.state.Focused && b.state.Hoverable(w.ID) {
 				b.state.FocusWindow(w.ID)
 			}
 		}

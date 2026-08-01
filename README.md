@@ -107,7 +107,9 @@ Focus **follows the mouse** (sloppy focus): hovering a window focuses
 it, in the tiled and floating layers alike; the pointer leaving all
 windows keeps the last focus. Clicking a window focuses it too. Set
 `focus-follows-mouse false` in config.kdl for plain click-to-focus.
-Focusing a floating window raises it above the other floats.
+Focusing a floating window raises it above the other floats. In
+stack mode, collapsed window strips are exempt: hovering a strip does
+not focus (and expand) the window — click it instead.
 
 - **Mod+left-drag** on a floating window: move it.
 - **Mod+right-drag** on a floating window: resize it — corners resize

@@ -120,6 +120,29 @@ func TestStackModeTitlebars(t *testing.T) {
 	}
 }
 
+func TestHoverable(t *testing.T) {
+	s := newTestState(t)
+	s.AddWindow(2, false) // focused: 2; column order: 1,2
+	s.SetMode(ModeStack)
+	if !s.Hoverable(2) {
+		t.Errorf("expanded window in stack mode should be hoverable")
+	}
+	if s.Hoverable(1) {
+		t.Errorf("collapsed strip should not be hoverable")
+	}
+	s.SetMode(ModeDefault)
+	if !s.Hoverable(1) {
+		t.Errorf("window in default mode should be hoverable")
+	}
+	s.SelectView("2") // view 1 (and its windows) becomes hidden
+	if s.Hoverable(1) || s.Hoverable(2) {
+		t.Errorf("hidden windows should not be hoverable")
+	}
+	if s.Hoverable(99) {
+		t.Errorf("unknown window should not be hoverable")
+	}
+}
+
 func TestTitlebarInsetsContent(t *testing.T) {
 	s := newTestState(t)
 	s.AddWindow(2, false)

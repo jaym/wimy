@@ -11,7 +11,7 @@
 
 pkgname=wimy-git
 _pkg=wimy
-pkgver=r11.g52e2a1a
+pkgver=r14.gdfa9a2c
 pkgrel=1
 pkgdesc="wmii-style window manager for the river Wayland compositor (0.4+)"
 arch=('x86_64' 'aarch64')

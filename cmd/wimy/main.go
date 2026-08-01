@@ -58,7 +58,7 @@ func main() {
 
 	go func() {
 		<-ctx.Done()
-		backend.Quit()
+		backend.Shutdown()
 	}()
 
 	if err := backend.Run(ctx); err != nil {

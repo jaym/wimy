@@ -50,6 +50,10 @@ type Backend struct {
 	err    error
 	cancel context.CancelFunc
 
+	// exitSession is set once ExitSession was requested: subsequent
+	// connection errors are the expected session teardown.
+	exitSession bool
+
 	notify func()
 
 	lastFocus wm.WindowID
@@ -106,8 +110,18 @@ func (b *Backend) QueueCommand(cmd string) {
 	}
 }
 
-// Quit stops the backend's event loop.
+// Quit ends the Wayland session (exit_session): the compositor exits
+// and every client, including wimy, is disconnected. wimy itself only
+// exits without ending the session on signals or crashes — per the
+// protocol, normal WM termination must not end the session.
 func (b *Backend) Quit() {
+	b.exitSession = true
+	b.wmg.ExitSession()
+}
+
+// Shutdown stops the backend's event loop without ending the
+// session (river keeps running without a window manager).
+func (b *Backend) Shutdown() {
 	b.mu.Lock()
 	b.done = true
 	b.mu.Unlock()
@@ -171,7 +185,11 @@ func (b *Backend) Run(ctx context.Context) (err error) {
 			continue
 		}
 		if errors.Is(err, context.Canceled) {
-			// Quit was called, or the parent context (signal) fired
+			// Shutdown was called, or the parent context (signal) fired
+			break
+		}
+		if b.exitSession {
+			// the compositor is tearing the session down
 			break
 		}
 		if cerr := conn.Err(); cerr != nil {
@@ -234,11 +252,11 @@ func (b *Backend) resolveOutputNames() {
 
 func (b *Backend) HandleRiverWindowManagerV1Unavailable(ctx context.Context) {
 	b.err = errors.New("another window manager is already running")
-	b.Quit()
+	b.Shutdown()
 }
 
 func (b *Backend) HandleRiverWindowManagerV1Finished(ctx context.Context) {
-	b.Quit()
+	b.Shutdown()
 }
 
 func (b *Backend) HandleRiverWindowManagerV1Output(ctx context.Context, id proto.RiverOutputV1) {

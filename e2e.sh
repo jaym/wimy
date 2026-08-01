@@ -122,6 +122,15 @@ check "killed window gone" "$(ctl state | jq --argjson id "$FOCUSED_BEFORE" '[.w
 ALAC_OUT=$(timeout 3 alacritty 2>&1 | head -2 || true)
 echo "alacritty headless: ${ALAC_OUT:-(no output)}"
 
+# --- quit ends the whole session -------------------------------------
+ctl quit >/dev/null
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  sleep 0.5
+  kill -0 "$RIVER_PID" 2>/dev/null || break
+done
+if kill -0 "$RIVER_PID" 2>/dev/null; then GONE=no; else GONE=yes; fi
+check "wimyctl quit exits river" "$GONE" yes
+
 echo
 echo "== PASS=$PASS FAIL=$FAIL =="
 [ "$FAIL" = 0 ]

@@ -54,8 +54,8 @@ func TestDefaultLayout(t *testing.T) {
 		if p[id].Rect != r {
 			t.Errorf("window %d: got %v, want %v", id, p[id].Rect, r)
 		}
-		if p[id].Hidden || p[id].Clip != nil {
-			t.Errorf("window %d: unexpected hidden/clip", id)
+		if p[id].Hidden || p[id].Collapsed {
+			t.Errorf("window %d: unexpected hidden/collapsed", id)
 		}
 	}
 }
@@ -84,19 +84,55 @@ func TestStackMode(t *testing.T) {
 	s.SetMode(ModeStack)
 	p := placements(s)
 	// focused window 3: strips for 1,2 above -> focusY = 56, H = 720-56
-	if p[3].Rect != (Rect{0, 56, 1280, 664}) || p[3].Clip != nil {
+	if p[3].Rect != (Rect{0, 56, 1280, 664}) || p[3].Collapsed {
 		t.Errorf("focused window wrong: %+v", p[3])
 	}
-	// windows 1,2 clipped to strips at top
-	if p[1].Rect.Y != 0 || p[1].Clip == nil || *p[1].Clip != (Rect{0, 0, 1280, 28}) {
+	// windows 1,2 collapsed to strips at top
+	if p[1].Rect.Y != 0 || !p[1].Collapsed {
 		t.Errorf("strip 1 wrong: %+v", p[1])
 	}
-	if p[2].Rect.Y != 28 || p[2].Clip == nil || *p[2].Clip != (Rect{0, 0, 1280, 28}) {
+	if p[2].Rect.Y != 28 || !p[2].Collapsed {
 		t.Errorf("strip 2 wrong: %+v", p[2])
 	}
 	// strip windows propose focused dims
 	if p[1].Rect.H != 664 {
 		t.Errorf("strip should propose focused height, got %d", p[1].Rect.H)
+	}
+}
+
+func TestStackModeTitlebars(t *testing.T) {
+	s := newTestState(t)
+	s.AddWindow(2, false)
+	s.AddWindow(3, false)
+	s.TitlebarHeight = 22
+	s.SetMode(ModeStack)
+	p := placements(s)
+	// strip height = titlebar height; content sits below the titlebar
+	if !p[1].Collapsed || p[1].Rect.Y != 22 || p[1].Rect.H != 676-22 {
+		t.Errorf("collapsed strip wrong: %+v", p[1])
+	}
+	// focused window content inset by bar
+	if p[3].Rect != (Rect{0, 44 + 22, 1280, 676 - 22}) {
+		t.Errorf("focused window wrong: %+v", p[3])
+	}
+	if !p[3].Bar {
+		t.Errorf("focused window should have a titlebar")
+	}
+}
+
+func TestTitlebarInsetsContent(t *testing.T) {
+	s := newTestState(t)
+	s.AddWindow(2, false)
+	s.TitlebarHeight = 22
+	p := placements(s)
+	if p[1].Rect != (Rect{0, 22, 1280, 360 - 22}) {
+		t.Errorf("window 1: %v", p[1].Rect)
+	}
+	if p[2].Rect != (Rect{0, 360 + 22, 1280, 360 - 22}) {
+		t.Errorf("window 2: %v", p[2].Rect)
+	}
+	if !p[1].Bar || !p[2].Bar {
+		t.Errorf("both windows should have titlebars")
 	}
 }
 
@@ -108,8 +144,8 @@ func TestMaxMode(t *testing.T) {
 	if p[2].Hidden || p[2].Rect != (Rect{0, 0, 1280, 720}) {
 		t.Errorf("focused window wrong in max mode: %+v", p[2])
 	}
-	if !p[1].Hidden {
-		t.Errorf("unfocused window should be hidden in max mode: %+v", p[1])
+	if !p[1].Hidden || p[1].Bar {
+		t.Errorf("unfocused window should be hidden without a bar in max mode: %+v", p[1])
 	}
 }
 

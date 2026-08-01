@@ -167,6 +167,21 @@ in fuzzel's own config — [`contrib/fuzzel/fuzzel.ini`](contrib/fuzzel/fuzzel.i
 matches the waybar theme; copy it to `~/.config/fuzzel/fuzzel.ini`.
 Tag/action prompts get labeled input (`go to tag: `, `action: `).
 
+## Window decorations
+
+wimy draws wmii-style slim **titlebars** itself (pure-Go renderer,
+`river_decoration_v1` surfaces): a bar with the window title, accent
+colored when focused. Clients are told to use server-side decorations
+(`use_ssd`), so their own fat CSD titlebars disappear; clients that
+insist on CSD (some GTK apps) keep theirs and get no wimy titlebar.
+
+- Stack mode collapsed strips are the titlebars themselves.
+- `titlebar off` in config.kdl gives dwm-style border-only
+  decorations; `titlebar height=N` and the four colors are
+  configurable (see config.kdl).
+- Borders are compositor-drawn; with a titlebar the top border is
+  omitted (the titlebar frame covers it).
+
 ## Waybar
 
 Waybar's built-in `river/*` modules **do not work** with river 0.4 —

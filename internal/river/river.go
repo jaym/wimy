@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image/color"
 	"log"
 	"os"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"wimy/internal/command"
 	"wimy/internal/config"
 	"wimy/internal/proto"
+	"wimy/internal/titlebar"
 	"wimy/internal/wm"
 )
 
@@ -34,13 +36,17 @@ type Backend struct {
 	wmg      proto.RiverWindowManagerV1
 	xkb      proto.RiverXkbBindingsV1
 	layer    proto.RiverLayerShellV1
+	comp     proto.WlCompositor
+	shm      proto.WlShm
+	tbr      *titlebar.Renderer
 
 	outputs  []*Output
 	windows  []*Window
 	seats    []*Seat
 	bindings []*XkbBinding
 
-	wlOutputNames map[uint32]string
+	wlOutputNames  map[uint32]string
+	wlOutputScales map[uint32]int32
 
 	mu     sync.Mutex
 	queue  []string
@@ -69,15 +75,30 @@ type Backend struct {
 // changed; it must not block.
 func New(cfg *config.Config, notify func()) *Backend {
 	b := &Backend{
-		cfg:           cfg,
-		state:         wm.NewState(),
-		wlOutputNames: make(map[uint32]string),
-		nextID:        1,
-		notify:        notify,
+		cfg:            cfg,
+		state:          wm.NewState(),
+		wlOutputNames:  make(map[uint32]string),
+		wlOutputScales: make(map[uint32]int32),
+		nextID:         1,
+		notify:         notify,
 	}
 	b.state.StackStrip = cfg.StackStrip
+	b.state.TitlebarHeight = cfg.Titlebar.Height
+	b.tbr = titlebar.New(cfg.Titlebar.Height, titlebar.Colors{
+		FocusedBg:     toRGBA(cfg.Titlebar.FocusedBg),
+		FocusedFg:     toRGBA(cfg.Titlebar.FocusedFg),
+		NormalBg:      toRGBA(cfg.Titlebar.NormalBg),
+		NormalFg:      toRGBA(cfg.Titlebar.NormalFg),
+		BorderFocused: toRGBA(cfg.Border.Focused),
+		BorderNormal:  toRGBA(cfg.Border.Normal),
+	}, cfg.Border.Width)
 	b.reg = command.New(&command.Env{State: b.state, Fx: b})
 	return b
+}
+
+// toRGBA converts a 32-bit-per-channel protocol color to 8-bit.
+func toRGBA(c config.Color) color.RGBA {
+	return color.RGBA{R: uint8(c.R >> 24), G: uint8(c.G >> 24), B: uint8(c.B >> 24), A: uint8(c.A >> 24)}
 }
 
 // State returns the model (only safe to use inside Snapshot or from
@@ -213,6 +234,13 @@ func (b *Backend) HandleWlRegistryGlobal(ctx context.Context, name uint32, iface
 		b.xkb = proto.As[proto.RiverXkbBindingsV1](b.registry.Bind(name, iface, 1))
 	case proto.RiverLayerShellV1Name:
 		b.layer = proto.As[proto.RiverLayerShellV1](b.registry.Bind(name, iface, 1))
+	case proto.WlCompositorName:
+		if version > 4 {
+			version = 4
+		}
+		b.comp = proto.As[proto.WlCompositor](b.registry.Bind(name, iface, version))
+	case proto.WlShmName:
+		b.shm = proto.As[proto.WlShm](b.registry.Bind(name, iface, 1))
 	case proto.WlOutputName:
 		bindWlOutput(b, name, version)
 	}
@@ -228,7 +256,12 @@ type wlOutput struct {
 
 func (o *wlOutput) HandleWlOutputName(ctx context.Context, name string) {
 	o.b.wlOutputNames[o.global] = name
-	o.b.resolveOutputNames()
+	o.b.resolveOutputInfo()
+}
+
+func (o *wlOutput) HandleWlOutputScale(ctx context.Context, factor int32) {
+	o.b.wlOutputScales[o.global] = factor
+	o.b.resolveOutputInfo()
 }
 
 func bindWlOutput(b *Backend, name uint32, version uint32) {
@@ -239,11 +272,18 @@ func bindWlOutput(b *Backend, name uint32, version uint32) {
 	obj.SetUserData(&wlOutput{b: b, global: name})
 }
 
-// resolveOutputNames applies learned wl_output names to river outputs.
-func (b *Backend) resolveOutputNames() {
+// resolveOutputInfo applies learned wl_output names and scales to
+// river outputs.
+func (b *Backend) resolveOutputInfo() {
 	for _, o := range b.outputs {
-		if o.Name == "" && o.WlName != 0 {
+		if o.WlName == 0 {
+			continue
+		}
+		if o.Name == "" {
 			o.Name = b.wlOutputNames[o.WlName]
+		}
+		if s := b.wlOutputScales[o.WlName]; s > 0 {
+			o.Scale = s
 		}
 	}
 }
@@ -366,6 +406,7 @@ func (b *Backend) syncModel() {
 	for _, w := range b.windows {
 		if w.Closed {
 			b.state.RemoveWindow(w.ID)
+			w.destroyDeco()
 			w.Node.Destroy()
 			w.Object.Destroy()
 		} else {
@@ -416,6 +457,14 @@ func (b *Backend) applyManage() {
 
 	// fullscreen requests
 	for _, w := range b.windows {
+		if !w.DecoSent {
+			w.DecoSent = true
+			if w.CSDOnly {
+				w.Object.UseCsd()
+			} else {
+				w.Object.UseSsd()
+			}
+		}
 		if w.FullscreenReq {
 			w.FullscreenReq = false
 			if out := b.outputForWindow(w); out != nil {
@@ -498,35 +547,55 @@ func (b *Backend) applyRender() {
 				w.Shown = true
 			}
 			w.Node.SetPosition(p.Rect.X, p.Rect.Y)
-			if p.Clip != nil {
-				w.Object.SetClipBox(p.Clip.X, p.Clip.Y, p.Clip.W, p.Clip.H)
-				w.Clipped = true
-			} else if w.Clipped {
-				w.Object.SetClipBox(0, 0, max32(p.Rect.W, 1), max32(p.Rect.H, 1))
-				w.Clipped = false
+			if p.Collapsed {
+				if b.state.TitlebarHeight > 0 && !w.CSDOnly {
+					// only the titlebar is visible
+					w.Object.SetContentClipBox(0, 0, max32(p.Rect.W, 1), 1)
+					w.ContentClipped = true
+				} else {
+					// no titlebars: clip content to a strip
+					w.Object.SetClipBox(0, 0, max32(p.Rect.W, 1), max32(b.cfg.StackStrip, 1))
+					w.Clipped = true
+				}
+			} else {
+				if w.Clipped {
+					w.Object.SetClipBox(0, 0, 0, 0)
+					w.Clipped = false
+				}
+				if w.ContentClipped {
+					w.Object.SetContentClipBox(0, 0, 0, 0)
+					w.ContentClipped = false
+				}
 			}
 			w.Node.PlaceTop()
-			b.setBorder(w, p.Focused && !b.layerFocus)
+			hasBar := b.state.TitlebarHeight > 0 && p.Bar && !w.CSDOnly
+			b.setBorder(w, p.Focused && !b.layerFocus, hasBar)
+			b.renderTitlebar(w, p)
 		}
 	}
 }
 
 // setBorder applies the configured border to a window if its focus
-// state changed since the last application.
-func (b *Backend) setBorder(w *Window, focused bool) {
-	if w.FocusSent == focused && w.BorderSet {
+// or titlebar state changed since the last application. With a
+// titlebar there is no top border: the titlebar frame covers it.
+func (b *Backend) setBorder(w *Window, focused bool, hasBar bool) {
+	if w.FocusSent == focused && w.BarSent == hasBar && w.BorderSet {
 		return
 	}
 	w.FocusSent = focused
+	w.BarSent = hasBar
 	w.BorderSet = true
 	c := b.cfg.Border.Normal
 	if focused {
 		c = b.cfg.Border.Focused
 	}
-	w.Object.SetBorders(
-		proto.RiverWindowV1EdgesTop|proto.RiverWindowV1EdgesBottom|
-			proto.RiverWindowV1EdgesLeft|proto.RiverWindowV1EdgesRight,
-		b.cfg.Border.Width, c.R, c.G, c.B, c.A)
+	var edges uint32 = proto.RiverWindowV1EdgesTop | proto.RiverWindowV1EdgesBottom |
+		proto.RiverWindowV1EdgesLeft | proto.RiverWindowV1EdgesRight
+	if hasBar {
+		edges = proto.RiverWindowV1EdgesBottom |
+			proto.RiverWindowV1EdgesLeft | proto.RiverWindowV1EdgesRight
+	}
+	w.Object.SetBorders(edges, b.cfg.Border.Width, c.R, c.G, c.B, c.A)
 }
 
 // outputForWindow returns the river output the window is rendered on.

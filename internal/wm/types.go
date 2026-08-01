@@ -188,8 +188,11 @@ type State struct {
 	FocusOutput int
 
 	// StackStrip is the height in pixels of unfocused window strips
-	// in stack mode.
+	// in stack mode when titlebars are disabled.
 	StackStrip int32
+	// TitlebarHeight is the height in pixels of the titlebar drawn
+	// above each window; 0 disables titlebars (dwm-style).
+	TitlebarHeight int32
 }
 
 // NewState returns an empty state with sane defaults.

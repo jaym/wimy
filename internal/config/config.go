@@ -58,6 +58,16 @@ type Border struct {
 	Normal  Color
 }
 
+// Titlebar settings. Height 0 disables titlebars (dwm-style: border
+// only).
+type Titlebar struct {
+	Height    int32
+	FocusedBg Color
+	FocusedFg Color
+	NormalBg  Color
+	NormalFg  Color
+}
+
 // Bind maps a key combination to a command string.
 type Bind struct {
 	Combo   string // as written in the config, for error messages
@@ -86,6 +96,7 @@ type Config struct {
 	Launcher   string // program launcher (Mod-p)
 	Menu       string // dmenu-compatible prompter (tag/action prompts)
 	Border     Border
+	Titlebar   Titlebar
 	StackStrip int32
 	Binds      []Bind
 	Actions    map[string]string // name -> shell command
@@ -111,6 +122,11 @@ func Default() *Config {
 	c.Border.Width = 2
 	c.Border.Focused, _ = ParseColor("#8aadf4")
 	c.Border.Normal, _ = ParseColor("#363a4f")
+	c.Titlebar.Height = 22
+	c.Titlebar.FocusedBg, _ = ParseColor("#8aadf4")
+	c.Titlebar.FocusedFg, _ = ParseColor("#1e2030")
+	c.Titlebar.NormalBg, _ = ParseColor("#24273a")
+	c.Titlebar.NormalFg, _ = ParseColor("#a5adcb")
 
 	binds := []struct{ combo, cmd string }{
 		{"Mod-Return", "spawn-terminal"},
@@ -286,6 +302,42 @@ func (c *Config) applyNode(n *document.Node) error {
 			return fmt.Errorf("stack-strip: want a positive integer")
 		}
 		c.StackStrip = int32(v)
+
+	case "titlebar":
+		// `titlebar off` disables titlebars entirely
+		if len(n.Arguments) >= 1 {
+			if s, ok := n.Arguments[0].Value.(string); ok && s == "off" {
+				c.Titlebar.Height = 0
+				return nil
+			}
+			return fmt.Errorf("titlebar: unexpected argument (want `off` or properties)")
+		}
+		colors := map[string]*Color{
+			"focused-bg": &c.Titlebar.FocusedBg,
+			"focused-fg": &c.Titlebar.FocusedFg,
+			"normal-bg":  &c.Titlebar.NormalBg,
+			"normal-fg":  &c.Titlebar.NormalFg,
+		}
+		for key, dst := range colors {
+			if p, ok := prop(n, key); ok {
+				s, ok := p.Value.(string)
+				if !ok {
+					return fmt.Errorf("titlebar %s: want a string", key)
+				}
+				col, err := ParseColor(s)
+				if err != nil {
+					return err
+				}
+				*dst = col
+			}
+		}
+		if p, ok := prop(n, "height"); ok {
+			h, ok := p.Value.(int64)
+			if !ok || h < 0 {
+				return fmt.Errorf("titlebar height: want a non-negative integer")
+			}
+			c.Titlebar.Height = int32(h)
+		}
 
 	case "border":
 		for _, key := range []string{"width", "focused", "normal"} {

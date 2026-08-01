@@ -25,7 +25,13 @@ menu "fuzzel --dmenu --anchor top --width 120 --lines 10 --border-radius 0"
 // Focus borders drawn by the compositor.
 border width=2 focused="#8aadf4" normal="#363a4f"
 
-// Height in pixels of unfocused window strips in stack mode.
+// Titlebars drawn by wimy above each window (wmii-style: slim bar
+// with the window title; stack-mode strips are these titlebars).
+// `titlebar off` gives dwm-style border-only decorations.
+titlebar height=22 focused-bg="#8aadf4" focused-fg="#1e2030" normal-bg="#24273a" normal-fg="#a5adcb"
+
+// Height in pixels of unfocused window strips in stack mode
+// (only used when titlebars are off).
 stack-strip 28
 
 // --- key bindings ---------------------------------------------------

@@ -1,16 +1,18 @@
 package wm
 
 // Placement describes where and how a single window should be
-// rendered: its geometry in global compositor coordinates, an optional
-// content clip box in window-local coordinates, and whether the window
-// should be hidden entirely.
+// rendered: its content geometry in global compositor coordinates,
+// whether it shows only its titlebar (collapsed stack strip), and
+// whether it should be hidden entirely.
 type Placement struct {
-	ID      WindowID
-	Rect    Rect  // global coordinates; W,H are the proposed dimensions
-	Clip    *Rect // window-local content clip; nil = no clip
-	Hidden  bool
-	Layer   Layer
-	Focused bool
+	ID        WindowID
+	Rect      Rect // content box, global coordinates; W,H are the proposed dimensions
+	Bar       bool // draw a titlebar above the content (at Rect.Y - bar height)
+	Collapsed bool // stack-mode strip: only the titlebar is visible
+	Hidden    bool
+	Layer     Layer
+	Focused   bool
+	Output    string // name of the output this placement renders on
 }
 
 // Layout computes the placements for every window for the current
@@ -52,7 +54,7 @@ func (s *State) layoutOutput(o *Output, placed map[WindowID]bool) []Placement {
 	for ci, c := range v.Columns {
 		w := widths[ci]
 		box := Rect{X: x, Y: area.Y, W: w, H: area.H}
-		out = append(out, s.layoutColumn(v, c, box, placed)...)
+		out = append(out, s.layoutColumn(v, c, box, o.Name, placed)...)
 		x += w
 	}
 
@@ -75,12 +77,27 @@ func (s *State) layoutOutput(o *Output, placed map[WindowID]bool) []Placement {
 		}
 		out = append(out, Placement{
 			ID:      id,
-			Rect:    win.FloatRect,
+			Rect:    s.insetBar(win.FloatRect),
+			Bar:     s.TitlebarHeight > 0,
 			Layer:   LayerFloating,
 			Focused: id == s.Focused,
+			Output:  o.Name,
 		})
 	}
 	return out
+}
+
+// insetBar shifts a content box down past the titlebar.
+func (s *State) insetBar(r Rect) Rect {
+	bar := s.TitlebarHeight
+	if bar <= 0 {
+		return r
+	}
+	h := r.H - bar
+	if h < 1 {
+		h = 1
+	}
+	return Rect{X: r.X, Y: r.Y + bar, W: r.W, H: h}
 }
 
 // columnWidths distributes the total width among columns according to
@@ -107,7 +124,7 @@ func columnWidths(cols []*Column, total int32) []int32 {
 }
 
 // layoutColumn computes placements for one column's windows.
-func (s *State) layoutColumn(v *View, c *Column, box Rect, placed map[WindowID]bool) []Placement {
+func (s *State) layoutColumn(v *View, c *Column, box Rect, outName string, placed map[WindowID]bool) []Placement {
 	ids := make([]WindowID, 0, len(c.Windows))
 	for _, id := range c.Windows {
 		if !placed[id] {
@@ -118,23 +135,23 @@ func (s *State) layoutColumn(v *View, c *Column, box Rect, placed map[WindowID]b
 		return nil
 	}
 	focused := v.focusedWindow()
+	bar := s.TitlebarHeight
 	var out []Placement
-	put := func(id WindowID, r Rect, clip *Rect, hidden bool) {
+	put := func(id WindowID, r Rect, collapsed, hidden bool) {
 		out = append(out, Placement{
-			ID:      id,
-			Rect:    r,
-			Clip:    clip,
-			Hidden:  hidden,
-			Layer:   LayerTiled,
-			Focused: id == s.Focused,
+			ID:        id,
+			Rect:      r,
+			Bar:       bar > 0 && !hidden,
+			Collapsed: collapsed,
+			Hidden:    hidden,
+			Layer:     LayerTiled,
+			Focused:   id == s.Focused,
+			Output:    outName,
 		})
 	}
 
 	mode := c.Mode
-	if mode == ModeStack && len(ids) == 1 {
-		mode = ModeDefault
-	}
-	if mode == ModeMax && len(ids) == 1 {
+	if len(ids) == 1 && (mode == ModeStack || mode == ModeMax) {
 		mode = ModeDefault
 	}
 
@@ -147,7 +164,7 @@ func (s *State) layoutColumn(v *View, c *Column, box Rect, placed map[WindowID]b
 			if i == len(ids)-1 {
 				ih = box.Y + box.H - y // remainder
 			}
-			put(id, Rect{X: box.X, Y: y, W: box.W, H: ih}, nil, false)
+			put(id, s.insetBar(Rect{X: box.X, Y: y, W: box.W, H: ih}), false, false)
 			y += ih
 		}
 
@@ -160,6 +177,9 @@ func (s *State) layoutColumn(v *View, c *Column, box Rect, placed map[WindowID]b
 			}
 		}
 		strip := s.StackStrip
+		if bar > 0 {
+			strip = bar // collapsed strip = exactly the titlebar
+		}
 		if strip < 1 {
 			strip = 1
 		}
@@ -173,21 +193,20 @@ func (s *State) layoutColumn(v *View, c *Column, box Rect, placed map[WindowID]b
 		focusH := box.H - int32(len(ids)-1)*strip
 		// windows above the focused one: strips at the top
 		for i := 0; i < fi; i++ {
-			r := Rect{X: box.X, Y: box.Y + int32(i)*strip, W: box.W, H: focusH}
-			put(ids[i], r, &Rect{X: 0, Y: 0, W: box.W, H: strip}, false)
+			stripY := box.Y + int32(i)*strip
+			put(ids[i], Rect{X: box.X, Y: stripY + bar, W: box.W, H: focusH - bar}, true, false)
 		}
 		focusY := box.Y + int32(fi)*strip
-		put(ids[fi], Rect{X: box.X, Y: focusY, W: box.W, H: focusH}, nil, false)
+		put(ids[fi], s.insetBar(Rect{X: box.X, Y: focusY, W: box.W, H: focusH}), false, false)
 		// windows below: strips at the bottom
 		for i := fi + 1; i < len(ids); i++ {
-			y := focusY + focusH + int32(i-fi-1)*strip
-			r := Rect{X: box.X, Y: y, W: box.W, H: focusH}
-			put(ids[i], r, &Rect{X: 0, Y: 0, W: box.W, H: strip}, false)
+			stripY := focusY + focusH + int32(i-fi-1)*strip
+			put(ids[i], Rect{X: box.X, Y: stripY + bar, W: box.W, H: focusH - bar}, true, false)
 		}
 
 	case ModeMax:
 		for _, id := range ids {
-			put(id, box, nil, id != focused)
+			put(id, s.insetBar(box), false, id != focused)
 		}
 	}
 	return out

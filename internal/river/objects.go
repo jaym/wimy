@@ -24,6 +24,8 @@ type Output struct {
 	// UsableX/Y/W/H is the non-exclusive area (after layer shell
 	// exclusive zones). Zero until the first event arrives.
 	UsableX, UsableY, UsableW, UsableH int32
+	// Scale is the output's integer scale factor (from wl_output).
+	Scale int32
 
 	NameInModel string // name currently used in the model
 	Added       bool   // registered in the model
@@ -34,7 +36,7 @@ func (o *Output) HandleRiverOutputV1Removed(ctx context.Context) { o.Removed = t
 
 func (o *Output) HandleRiverOutputV1WlOutput(ctx context.Context, name uint32) {
 	o.WlName = name
-	o.Backend.resolveOutputNames()
+	o.Backend.resolveOutputInfo()
 }
 
 // HandleRiverLayerShellOutputV1NonExclusiveArea records the area left
@@ -76,12 +78,28 @@ type Window struct {
 
 	Width, Height int32 // actual dimensions from the compositor
 
-	New       bool
-	Closed    bool
-	Shown     bool // last show/hide state applied
-	Clipped   bool // a clip box was applied
-	FocusSent bool // last focus border state applied
-	BorderSet bool // a border was applied at least once
+	New            bool
+	Closed         bool
+	Shown          bool // last show/hide state applied
+	Clipped        bool // a clip box was applied
+	ContentClipped bool // a content clip box was applied
+	FocusSent      bool // last focus border state applied
+	BarSent        bool // last titlebar border state applied
+	BorderSet      bool // a border was applied at least once
+
+	// CSDOnly is true for clients that only support client-side
+	// decorations (decoration_hint); they keep their own titlebar
+	// and get no wimy titlebar.
+	CSDOnly  bool
+	DecoSent bool // use_ssd/use_csd was sent
+
+	// Titlebar decoration
+	Deco        proto.RiverDecorationV1
+	DecoSurface proto.WlSurface
+	DecoTitle   string
+	DecoFocused bool
+	DecoWidth   int32
+	DecoScale   int32
 
 	Fullscreen      bool
 	FullscreenReq   bool // client requested fullscreen
@@ -119,6 +137,15 @@ func (w *Window) HandleRiverWindowV1Title(ctx context.Context, title wlcl.NullSt
 
 func (w *Window) HandleRiverWindowV1Parent(ctx context.Context, parent proto.RiverWindowV1) {
 	w.Parent = parent.IsSet()
+}
+
+// HandleRiverWindowV1DecorationHint notes clients that can only do CSD.
+func (w *Window) HandleRiverWindowV1DecorationHint(ctx context.Context, hint uint32) {
+	only := hint == proto.RiverWindowV1DecorationHintOnlySupportsCsd
+	if only != w.CSDOnly {
+		w.CSDOnly = only
+		w.DecoSent = false // renegotiate at the next manage sequence
+	}
 }
 
 func (w *Window) HandleRiverWindowV1FullscreenRequested(ctx context.Context, output proto.RiverOutputV1) {

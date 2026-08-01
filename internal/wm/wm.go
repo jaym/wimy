@@ -404,9 +404,13 @@ func (s *State) Grow(d Direction, pct float64) {
 	if ni < 0 || ni >= len(v.Columns) {
 		return
 	}
-	c, n := v.Columns[ci], v.Columns[ni]
+	ResizeColumns(v.Columns[ci], v.Columns[ni], pct/100)
+}
+
+// ResizeColumns shifts width factor from column n to column c by
+// shift (negative reverses). Factors never drop below 0.1.
+func ResizeColumns(c, n *Column, shift float64) {
 	const minFactor = 0.1
-	shift := pct / 100
 	if c.Factor+shift < minFactor {
 		shift = minFactor - c.Factor
 	}
@@ -415,6 +419,89 @@ func (s *State) Grow(d Direction, pct float64) {
 	}
 	c.Factor += shift
 	n.Factor -= shift
+}
+
+// --- mouse geometry ---
+
+// ColumnBoundaries returns the x positions of the boundaries between
+// the view's columns in global coordinates: the left edge of the
+// tiling area, each inter-column boundary, and the right edge.
+func (s *State) ColumnBoundaries(v *View, area Rect) []int32 {
+	widths := columnWidths(v.Columns, area.W)
+	out := make([]int32, 0, len(widths)+1)
+	x := area.X
+	out = append(out, x)
+	for _, w := range widths {
+		x += w
+		out = append(out, x)
+	}
+	return out
+}
+
+// NearestColumnBoundary returns the index into ColumnBoundaries of
+// the boundary closest to x.
+func NearestColumnBoundary(boundaries []int32, x int32) int {
+	best, bestDist := 0, int32(1<<30)
+	for i, b := range boundaries {
+		d := b - x
+		if d < 0 {
+			d = -d
+		}
+		if d < bestDist {
+			best, bestDist = i, d
+		}
+	}
+	return best
+}
+
+// ResizeColumnBoundary shifts the boundary at index i (1..len-2 are
+// inter-column boundaries; 0 and len-1 are the outer edges and
+// ignored) by dx pixels relative to the tiling area width.
+func (s *State) ResizeColumnBoundary(v *View, i int, dx int32, areaW int32) {
+	if v == nil || i <= 0 || i >= len(v.Columns) || areaW <= 0 {
+		return
+	}
+	var sum float64
+	for _, c := range v.Columns {
+		sum += c.Factor
+	}
+	if sum <= 0 {
+		return
+	}
+	ResizeColumns(v.Columns[i-1], v.Columns[i], float64(dx)/float64(areaW)*sum)
+}
+
+// FloatRectOf returns the floating geometry of a window.
+func (s *State) FloatRectOf(id WindowID) Rect {
+	if w := s.Windows[id]; w != nil {
+		return w.FloatRect
+	}
+	return Rect{}
+}
+
+// SetFloatRect sets the floating geometry of a window (clamped to a
+// minimum size).
+func (s *State) SetFloatRect(id WindowID, r Rect) {
+	if w := s.Windows[id]; w != nil {
+		if r.W < 50 {
+			r.W = 50
+		}
+		if r.H < 50 {
+			r.H = 50
+		}
+		w.FloatRect = r
+	}
+}
+
+// OutputArea returns the tiling area of the output showing the given
+// view (for boundary math during pointer ops).
+func (s *State) OutputArea(view string) Rect {
+	for _, o := range s.Outputs {
+		if o.View == view {
+			return o.tilingArea()
+		}
+	}
+	return Rect{}
 }
 
 // --- views and tags ---

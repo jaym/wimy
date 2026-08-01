@@ -10076,6 +10076,286 @@ const (
 	ZwpVirtualKeyboardManagerV1ErrorUnauthorized = 0
 )
 
+// ../../protocol/wlr-virtual-pointer-unstable-v1.xml
+
+// Copyright © 2019 Josef Gajdusek
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice (including the next
+// paragraph) shall be included in all copies or substantial portions of the
+// Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+
+// This protocol allows clients to emulate a physical pointer device. The
+// requests are mostly mirror opposites of those specified in wl_pointer.
+type ZwlrVirtualPointerV1 struct {
+	_   raw.Marker[ZwlrVirtualPointerV1]
+	raw *raw.Object
+}
+
+// Conn returns the underlying connection.
+func (o ZwlrVirtualPointerV1) Conn() *wlcl.Connection { return (*wlcl.Connection)(o.raw.Conn()) }
+
+// IsSet returns true if the object is valid (non-zero).
+func (o ZwlrVirtualPointerV1) IsSet() bool { return o.raw != nil }
+
+// Version returns the object's version.
+func (o ZwlrVirtualPointerV1) Version() uint32 { return o.raw.Version() }
+
+// UserData returns the object's user data.
+func (o ZwlrVirtualPointerV1) UserData() ZwlrVirtualPointerV1Data {
+	data, _ := o.raw.UserData().(ZwlrVirtualPointerV1Data)
+	return data
+}
+
+// SetUserData sets the object's user data.
+func (o ZwlrVirtualPointerV1) SetUserData(v ZwlrVirtualPointerV1Data) { o.raw.SetUserData(v) }
+
+// The pointer has moved by a relative amount to the previous request.
+//
+// Values are in the global compositor space.
+func (o ZwlrVirtualPointerV1) Motion(time uint32, dx float32, dy float32) {
+	conn := o.raw.Conn()
+	conn.SendRequest(o.raw, 0, func() (args []byte, fds []int) {
+		args = make([]byte, 0, 12)
+		args = conn.MarshalUint(args, time)
+		args = conn.MarshalFixed(args, dx)
+		args = conn.MarshalFixed(args, dy)
+		return
+	})
+	return
+}
+
+// The pointer has moved in an absolute coordinate frame.
+//
+// Value of x can range from 0 to x_extent, value of y can range from 0
+// to y_extent.
+func (o ZwlrVirtualPointerV1) MotionAbsolute(time uint32, x uint32, y uint32, xExtent uint32, yExtent uint32) {
+	conn := o.raw.Conn()
+	conn.SendRequest(o.raw, 1, func() (args []byte, fds []int) {
+		args = make([]byte, 0, 20)
+		args = conn.MarshalUint(args, time)
+		args = conn.MarshalUint(args, x)
+		args = conn.MarshalUint(args, y)
+		args = conn.MarshalUint(args, xExtent)
+		args = conn.MarshalUint(args, yExtent)
+		return
+	})
+	return
+}
+
+// A button was pressed or released.
+func (o ZwlrVirtualPointerV1) Button(time uint32, button uint32, state uint32) {
+	conn := o.raw.Conn()
+	conn.SendRequest(o.raw, 2, func() (args []byte, fds []int) {
+		args = make([]byte, 0, 12)
+		args = conn.MarshalUint(args, time)
+		args = conn.MarshalUint(args, button)
+		args = conn.MarshalUint(args, state)
+		return
+	})
+	return
+}
+
+// Scroll and other axis requests.
+func (o ZwlrVirtualPointerV1) Axis(time uint32, axis uint32, value float32) {
+	conn := o.raw.Conn()
+	conn.SendRequest(o.raw, 3, func() (args []byte, fds []int) {
+		args = make([]byte, 0, 12)
+		args = conn.MarshalUint(args, time)
+		args = conn.MarshalUint(args, axis)
+		args = conn.MarshalFixed(args, value)
+		return
+	})
+	return
+}
+
+// Indicates the set of events that logically belong together.
+func (o ZwlrVirtualPointerV1) Frame() {
+	conn := o.raw.Conn()
+	conn.SendRequest(o.raw, 4, func() (args []byte, fds []int) {
+		return
+	})
+	return
+}
+
+// Source information for scroll and other axis.
+func (o ZwlrVirtualPointerV1) AxisSource(axisSource uint32) {
+	conn := o.raw.Conn()
+	conn.SendRequest(o.raw, 5, func() (args []byte, fds []int) {
+		args = make([]byte, 0, 4)
+		args = conn.MarshalUint(args, axisSource)
+		return
+	})
+	return
+}
+
+// Stop notification for scroll and other axes.
+func (o ZwlrVirtualPointerV1) AxisStop(time uint32, axis uint32) {
+	conn := o.raw.Conn()
+	conn.SendRequest(o.raw, 6, func() (args []byte, fds []int) {
+		args = make([]byte, 0, 8)
+		args = conn.MarshalUint(args, time)
+		args = conn.MarshalUint(args, axis)
+		return
+	})
+	return
+}
+
+// Discrete step information for scroll and other axes.
+//
+// This event allows the client to extend data normally sent using the axis
+// event with discrete value.
+func (o ZwlrVirtualPointerV1) AxisDiscrete(time uint32, axis uint32, value float32, discrete int32) {
+	conn := o.raw.Conn()
+	conn.SendRequest(o.raw, 7, func() (args []byte, fds []int) {
+		args = make([]byte, 0, 16)
+		args = conn.MarshalUint(args, time)
+		args = conn.MarshalUint(args, axis)
+		args = conn.MarshalFixed(args, value)
+		args = conn.MarshalInt(args, discrete)
+		return
+	})
+	return
+}
+
+func (o ZwlrVirtualPointerV1) Destroy() {
+	conn := o.raw.Conn()
+	conn.SendRequest(o.raw, 8, func() (args []byte, fds []int) {
+		o.raw.Destroy()
+		return
+	})
+	return
+}
+
+type ZwlrVirtualPointerV1Data interface {
+}
+
+type ZwlrVirtualPointerV1Stub struct{}
+
+func unmarshalEventZwlrVirtualPointerV1(o *raw.Object, op uint16, args []byte, fds []int) (raw.HandleEventFunc, error) {
+	switch op {
+	default:
+		return nil, fmt.Errorf("zwlr_virtual_pointer_v1: invalid event opcode %d", op)
+	}
+}
+
+const ZwlrVirtualPointerV1Name = "zwlr_virtual_pointer_v1"
+
+var interfaceZwlrVirtualPointerV1 = raw.Interface{
+	Name:           "zwlr_virtual_pointer_v1",
+	Requests:       []string{"motion", "motion_absolute", "button", "axis", "frame", "axis_source", "axis_stop", "axis_discrete", "destroy"},
+	Events:         []string{},
+	EventsFDs:      []int{},
+	UnmarshalEvent: unmarshalEventZwlrVirtualPointerV1,
+}
+
+const (
+	ZwlrVirtualPointerV1ErrorInvalidAxis       = 0
+	ZwlrVirtualPointerV1ErrorInvalidAxisSource = 1
+)
+
+// This object allows clients to create individual virtual pointer objects.
+type ZwlrVirtualPointerManagerV1 struct {
+	_   raw.Marker[ZwlrVirtualPointerManagerV1]
+	raw *raw.Object
+}
+
+// Conn returns the underlying connection.
+func (o ZwlrVirtualPointerManagerV1) Conn() *wlcl.Connection { return (*wlcl.Connection)(o.raw.Conn()) }
+
+// IsSet returns true if the object is valid (non-zero).
+func (o ZwlrVirtualPointerManagerV1) IsSet() bool { return o.raw != nil }
+
+// Version returns the object's version.
+func (o ZwlrVirtualPointerManagerV1) Version() uint32 { return o.raw.Version() }
+
+// UserData returns the object's user data.
+func (o ZwlrVirtualPointerManagerV1) UserData() ZwlrVirtualPointerManagerV1Data {
+	data, _ := o.raw.UserData().(ZwlrVirtualPointerManagerV1Data)
+	return data
+}
+
+// SetUserData sets the object's user data.
+func (o ZwlrVirtualPointerManagerV1) SetUserData(v ZwlrVirtualPointerManagerV1Data) {
+	o.raw.SetUserData(v)
+}
+
+// Creates a new virtual pointer. The optional seat is a suggestion to the
+// compositor.
+func (o ZwlrVirtualPointerManagerV1) CreateVirtualPointer(seat WlSeat) ZwlrVirtualPointerV1 {
+	conn := o.raw.Conn()
+	var id *raw.Object
+	conn.SendRequest(o.raw, 0, func() (args []byte, fds []int) {
+		args = make([]byte, 0, 8)
+		args = conn.MarshalNullObject(args, seat.raw)
+		id, args = conn.MarshalNewID(args, &interfaceZwlrVirtualPointerV1, o.raw.Version())
+		return
+	})
+	return As[ZwlrVirtualPointerV1](id)
+}
+
+func (o ZwlrVirtualPointerManagerV1) Destroy() {
+	conn := o.raw.Conn()
+	conn.SendRequest(o.raw, 1, func() (args []byte, fds []int) {
+		o.raw.Destroy()
+		return
+	})
+	return
+}
+
+// Creates a new virtual pointer. The seat and the output arguments are
+// optional. If the seat argument is set, the compositor should assign the
+// input device to the requested seat. If the output argument is set, the
+// compositor should map the input device to the requested output.
+func (o ZwlrVirtualPointerManagerV1) CreateVirtualPointerWithOutput(seat WlSeat, output WlOutput) ZwlrVirtualPointerV1 {
+	conn := o.raw.Conn()
+	var id *raw.Object
+	conn.SendRequest(o.raw, 2, func() (args []byte, fds []int) {
+		args = make([]byte, 0, 12)
+		args = conn.MarshalNullObject(args, seat.raw)
+		args = conn.MarshalNullObject(args, output.raw)
+		id, args = conn.MarshalNewID(args, &interfaceZwlrVirtualPointerV1, o.raw.Version())
+		return
+	})
+	return As[ZwlrVirtualPointerV1](id)
+}
+
+type ZwlrVirtualPointerManagerV1Data interface {
+}
+
+type ZwlrVirtualPointerManagerV1Stub struct{}
+
+func unmarshalEventZwlrVirtualPointerManagerV1(o *raw.Object, op uint16, args []byte, fds []int) (raw.HandleEventFunc, error) {
+	switch op {
+	default:
+		return nil, fmt.Errorf("zwlr_virtual_pointer_manager_v1: invalid event opcode %d", op)
+	}
+}
+
+const ZwlrVirtualPointerManagerV1Name = "zwlr_virtual_pointer_manager_v1"
+
+var interfaceZwlrVirtualPointerManagerV1 = raw.Interface{
+	Name:           "zwlr_virtual_pointer_manager_v1",
+	Requests:       []string{"create_virtual_pointer", "destroy", "create_virtual_pointer_with_output"},
+	Events:         []string{},
+	EventsFDs:      []int{},
+	UnmarshalEvent: unmarshalEventZwlrVirtualPointerManagerV1,
+}
+
 func Interfaces(name string) *raw.Interface {
 	switch name {
 	case "wl_display":
@@ -10156,6 +10436,10 @@ func Interfaces(name string) *raw.Interface {
 		return &interfaceZwpVirtualKeyboardV1
 	case "zwp_virtual_keyboard_manager_v1":
 		return &interfaceZwpVirtualKeyboardManagerV1
+	case "zwlr_virtual_pointer_v1":
+		return &interfaceZwlrVirtualPointerV1
+	case "zwlr_virtual_pointer_manager_v1":
+		return &interfaceZwlrVirtualPointerManagerV1
 	}
 	return nil
 }

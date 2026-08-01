@@ -277,6 +277,16 @@ func (s *State) freeViewName() string {
 	}
 }
 
+// FloatContains reports whether the window is in the view's floating layer.
+func (v *View) FloatContains(id WindowID) bool {
+	for _, w := range v.Float {
+		if w == id {
+			return true
+		}
+	}
+	return false
+}
+
 // contains reports whether the window is arranged on the view.
 func (v *View) contains(id WindowID) bool {
 	for _, c := range v.Columns {
@@ -424,6 +434,17 @@ func (v *View) focusWindow(id WindowID) {
 			return
 		}
 	}
+}
+
+// ActiveViewOf returns the view the window is currently rendered in:
+// the view of the first output whose selected view contains it.
+func (s *State) ActiveViewOf(id WindowID) *View {
+	for _, o := range s.Outputs {
+		if v := s.View(o.View); v != nil && v.contains(id) {
+			return v
+		}
+	}
+	return nil
 }
 
 // defaultFloatRect returns a centered rectangle covering half the

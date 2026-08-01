@@ -44,6 +44,7 @@ gofmt -l cmd internal   # must print nothing (except gen.go is fine)
 ./e2e-keys.sh  #  6 checks: REAL key events → bindings (virtual keyboard)
 ./e2e-layer.sh #  5 checks: layer shell (fuzzel survives, focus events)
 ./e2e-deco.sh  #  7 checks: decorations (use_ssd, titlebars, clips)
+./e2e-mouse.sh #  6 checks: pointer drags (virtual pointer), grow binding
 ```
 
 The e2e scripts run `river` with `WLR_BACKENDS=headless
@@ -144,12 +145,10 @@ go generate ./internal/proto
 
 ## Deferred / future work
 
-- Mouse: pointer bindings, interactive move/resize, click-focus (the
-  protocol has GetPointerBinding/Op events; see tinyrwm for the
-  pattern). PLAN.md step 12.
 - Not bound yet: river-input-management, river-libinput-config,
   river-xkb-config (input device configuration hooks).
 - Multi-seat currently shares one focus.
+- Tiled windows can't be moved between columns by mouse (keyboard only).
 
 ## Style
 

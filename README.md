@@ -81,6 +81,18 @@ All bindings are remappable; the defaults (wmii's set):
 | Mod-Shift-t | move window to tag (prompt) |
 | Mod-Shift-0..9 | move window to numbered view |
 | Mod-d / Mod-s / Mod-m | column mode: default / stack / max |
+| Mod-Ctrl-h / Mod-Ctrl-l | shrink / grow focused column width |
+
+## Mouse
+
+- **Click** a window to focus it (floating windows raise).
+- **Mod+left-drag** on a floating window: move it.
+- **Mod+right-drag** on a floating window: resize it — corners resize
+  two edges, sides one.
+- **Mod+right-drag** on a tiled window: drag the nearest column
+  boundary.
+- Client-initiated interactive move/resize (e.g. CSD titlebar drags)
+  works too.
 
 New windows inherit the focused window's tags. Moving a window to a tag
 replaces its tag set; use `wimyctl run 'tag +web'` to *add* a tag (the
@@ -226,8 +238,6 @@ converting sway-style `output … scale …` lines.
 
 ## Current limitations
 
-- Mouse support (Mod+drag move/resize, click focus) is not implemented
-  yet (planned; the protocol supports it).
 - Fullscreen is only honored when a client requests it; there is no
   key binding to toggle it.
 - Multiple seats share a single focus.

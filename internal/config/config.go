@@ -153,6 +153,9 @@ func Default() *Config {
 		{"Mod-d", "mode default"},
 		{"Mod-s", "mode stack"},
 		{"Mod-m", "mode max"},
+
+		{"Mod-Ctrl-h", "grow left"},
+		{"Mod-Ctrl-l", "grow right"},
 	}
 	for n := 0; n <= 9; n++ {
 		binds = append(binds,

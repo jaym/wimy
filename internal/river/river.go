@@ -40,10 +40,11 @@ type Backend struct {
 	shm      proto.WlShm
 	tbr      *titlebar.Renderer
 
-	outputs  []*Output
-	windows  []*Window
-	seats    []*Seat
-	bindings []*XkbBinding
+	outputs         []*Output
+	windows         []*Window
+	seats           []*Seat
+	bindings        []*XkbBinding
+	pointerBindings []*PointerBinding
 
 	wlOutputNames  map[uint32]string
 	wlOutputScales map[uint32]int32
@@ -310,7 +311,7 @@ func (b *Backend) HandleRiverWindowManagerV1Output(ctx context.Context, id proto
 }
 
 func (b *Backend) HandleRiverWindowManagerV1Window(ctx context.Context, id proto.RiverWindowV1) {
-	w := NewWindow(id, b.nextID)
+	w := NewWindow(id, b.nextID, b)
 	b.nextID++
 	b.windows = append(b.windows, w)
 }
@@ -337,6 +338,20 @@ func (b *Backend) HandleRiverWindowManagerV1Seat(ctx context.Context, id proto.R
 		}
 		obj.SetUserData(xb)
 		b.bindings = append(b.bindings, xb)
+	}
+	// pointer bindings: Mod+drag move/resize
+	for _, button := range []uint32{btnLeft, btnRight} {
+		obj := id.GetPointerBinding(button, b.cfg.ModMask)
+		pb := &PointerBinding{
+			Object: obj,
+			Seat:   s,
+			Button: button,
+			OnPressed: func(btn uint32) {
+				b.pointerPress(s, btn)
+			},
+		}
+		obj.SetUserData(pb)
+		b.pointerBindings = append(b.pointerBindings, pb)
 	}
 }
 
@@ -451,6 +466,23 @@ func (b *Backend) applyManage() {
 				if xb.Seat == s {
 					xb.Object.Enable()
 				}
+			}
+			for _, pb := range b.pointerBindings {
+				if pb.Seat == s {
+					pb.Object.Enable()
+				}
+			}
+		}
+		// interactive pointer ops
+		if s.Op != nil {
+			switch {
+			case s.OpReleased:
+				s.Op.End(s)
+				s.Object.OpEnd()
+				s.Op = nil
+				s.OpReleased = false
+			default:
+				s.Op.Apply(s, s.OpDx, s.OpDy)
 			}
 		}
 	}

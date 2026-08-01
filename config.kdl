@@ -75,6 +75,10 @@ bind "Mod-d" { mode "default"; }
 bind "Mod-s" { mode "stack"; }
 bind "Mod-m" { mode "max"; }
 
+// column resize (Mod+right-drag on a column boundary works too)
+bind "Mod-Ctrl-h" { grow "left"; }
+bind "Mod-Ctrl-l" { grow "right"; }
+
 // numbered views (0 means 10)
 bind "Mod-1" { view-n 1; }
 bind "Mod-2" { view-n 2; }

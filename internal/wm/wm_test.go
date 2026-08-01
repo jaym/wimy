@@ -426,3 +426,59 @@ func TestWindowRendersOnFirstOutputOnly(t *testing.T) {
 		t.Fatalf("window should render on first output, got x=%d", p.Rect.X)
 	}
 }
+
+func TestColumnBoundaries(t *testing.T) {
+	s := newTestState(t)
+	s.AddWindow(2, false)
+	s.MoveDir(DirRight) // window 2 to column 2
+	v := s.activeView()
+	b := s.ColumnBoundaries(v, Rect{X: 0, Y: 0, W: 1280, H: 720})
+	if len(b) != 3 || b[0] != 0 || b[1] != 640 || b[2] != 1280 {
+		t.Fatalf("boundaries: %v", b)
+	}
+	if NearestColumnBoundary(b, 700) != 1 {
+		t.Fatalf("nearest to 700 should be 1")
+	}
+	if NearestColumnBoundary(b, 1279) != 2 {
+		t.Fatalf("nearest to 1279 should be 2")
+	}
+}
+
+func TestResizeColumnBoundary(t *testing.T) {
+	s := newTestState(t)
+	s.AddWindow(2, false)
+	s.MoveDir(DirRight)
+	v := s.activeView()
+	// drag boundary 1 (middle) 128px right on a 1280 area
+	s.ResizeColumnBoundary(v, 1, 128, 1280)
+	f1, f2 := v.Columns[0].Factor, v.Columns[1].Factor
+	if f1 <= 1 || f2 >= 1 {
+		t.Fatalf("factors should shift: %v %v", f1, f2)
+	}
+	if f1+f2 < 1.99 || f1+f2 > 2.01 {
+		t.Fatalf("total factor must be conserved: %v", f1+f2)
+	}
+	// outer edges are ignored
+	s.ResizeColumnBoundary(v, 0, 500, 1280)
+	if v.Columns[0].Factor != f1 {
+		t.Fatalf("outer edge must be ignored")
+	}
+}
+
+func TestFloatRectOps(t *testing.T) {
+	s := newTestState(t)
+	s.AddWindow(2, false)
+	s.ToggleFloat()
+	r := s.FloatRectOf(2)
+	if r.W != 640 || r.H != 360 {
+		t.Fatalf("float rect: %v", r)
+	}
+	s.SetFloatRect(2, Rect{X: 10, Y: 20, W: 400, H: 300})
+	if got := s.FloatRectOf(2); got != (Rect{10, 20, 400, 300}) {
+		t.Fatalf("set float rect: %v", got)
+	}
+	s.SetFloatRect(2, Rect{X: 0, Y: 0, W: 5, H: 5})
+	if got := s.FloatRectOf(2); got.W != 50 || got.H != 50 {
+		t.Fatalf("min clamp: %v", got)
+	}
+}

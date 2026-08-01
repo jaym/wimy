@@ -38,6 +38,7 @@ type WindowState struct {
 	Tags     []string    `json:"tags"`
 	Focused  bool        `json:"focused"`
 	Floating bool        `json:"floating"`
+	Rect     *wm.Rect    `json:"rect,omitempty"` // rendered geometry, if placed
 }
 
 // buildState converts the model to its JSON representation. It must be
@@ -58,6 +59,7 @@ func buildState(s *wm.State) State {
 			Rect:    o.Rect,
 		})
 	}
+	rects := layoutRects(s)
 	for _, v := range s.Views {
 		vs := ViewState{
 			Name:          v.Name,
@@ -79,6 +81,7 @@ func buildState(s *wm.State) State {
 			Tags:     w.TagList(),
 			Focused:  w.ID == s.Focused,
 			Floating: floatsAnywhere(s, w.ID),
+			Rect:     rects[w.ID],
 		})
 	}
 	return st
@@ -102,4 +105,17 @@ func floatsAnywhere(s *wm.State, id wm.WindowID) bool {
 		}
 	}
 	return false
+}
+
+// layoutRects maps window IDs to their rendered content rects.
+func layoutRects(s *wm.State) map[wm.WindowID]*wm.Rect {
+	out := make(map[wm.WindowID]*wm.Rect)
+	for _, p := range s.Layout() {
+		if p.Hidden {
+			continue
+		}
+		r := p.Rect
+		out[p.ID] = &r
+	}
+	return out
 }

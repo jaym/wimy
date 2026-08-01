@@ -71,6 +71,8 @@ type Window struct {
 	Object proto.RiverWindowV1
 	Node   proto.RiverNodeV1
 
+	backend *Backend
+
 	ID     wm.WindowID
 	AppID  string
 	Title  string
@@ -106,16 +108,20 @@ type Window struct {
 	UnfullscreenReq bool // client requested to exit fullscreen
 }
 
-func NewWindow(object proto.RiverWindowV1, id wm.WindowID) *Window {
+func NewWindow(object proto.RiverWindowV1, id wm.WindowID, b *Backend) *Window {
 	w := &Window{
-		Object: object,
-		Node:   object.GetNode(),
-		ID:     id,
-		New:    true,
+		Object:  object,
+		Node:    object.GetNode(),
+		ID:      id,
+		New:     true,
+		backend: b,
 	}
 	object.SetUserData(w)
 	return w
 }
+
+// Backend returns the backend owning this window.
+func (w *Window) Backend() (*Backend, bool) { return w.backend, w.backend != nil }
 
 func (w *Window) HandleRiverWindowV1Closed(ctx context.Context) { w.Closed = true }
 
@@ -152,6 +158,20 @@ func (w *Window) HandleRiverWindowV1FullscreenRequested(ctx context.Context, out
 	w.FullscreenReq = true
 }
 
+func (w *Window) HandleRiverWindowV1PointerMoveRequested(ctx context.Context, seat proto.RiverSeatV1) {
+	// client-initiated move (e.g. CSD titlebar drag); start the op
+	// immediately — the request is followed by a manage_start
+	if b, ok := w.Backend(); ok {
+		b.clientMoveRequest(w, seat)
+	}
+}
+
+func (w *Window) HandleRiverWindowV1PointerResizeRequested(ctx context.Context, seat proto.RiverSeatV1, edges uint32) {
+	if b, ok := w.Backend(); ok {
+		b.clientResizeRequest(w, seat, edges)
+	}
+}
+
 func (w *Window) HandleRiverWindowV1ExitFullscreenRequested(ctx context.Context) {
 	w.UnfullscreenReq = true
 }
@@ -168,9 +188,34 @@ type Seat struct {
 	Removed bool
 
 	Interacted *Window
+	Hovered    *Window
+	PointerX   int32
+	PointerY   int32
+
+	Op         SeatOp
+	OpDx, OpDy int32
+	OpReleased bool
 }
 
 func (s *Seat) HandleRiverSeatV1Removed(ctx context.Context) { s.Removed = true }
+
+func (s *Seat) HandleRiverSeatV1PointerEnter(ctx context.Context, window proto.RiverWindowV1) {
+	if w, ok := window.UserData().(*Window); ok {
+		s.Hovered = w
+	}
+}
+
+func (s *Seat) HandleRiverSeatV1PointerLeave(ctx context.Context) { s.Hovered = nil }
+
+func (s *Seat) HandleRiverSeatV1PointerPosition(ctx context.Context, x int32, y int32) {
+	s.PointerX, s.PointerY = x, y
+}
+
+func (s *Seat) HandleRiverSeatV1OpDelta(ctx context.Context, dx int32, dy int32) {
+	s.OpDx, s.OpDy = dx, dy
+}
+
+func (s *Seat) HandleRiverSeatV1OpRelease(ctx context.Context) { s.OpReleased = true }
 
 // HandleRiverLayerShellSeatV1FocusExclusive marks that a layer shell
 // surface (e.g. a launcher) takes exclusive keyboard focus.

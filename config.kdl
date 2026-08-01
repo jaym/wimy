@@ -91,7 +91,10 @@ bind "Mod-Shift-0" { moveto-n 0; }
 action "quit" { run "wimyctl quit"; }
 
 // --- autostart --------------------------------------------------------
-// Programs started with the window manager.
+// Programs started with the window manager. Examples:
+//   waybar with the wimy modules from contrib/waybar/
+//   kanshi for display resolution/scale (see contrib/kanshi/config)
 // autostart {
-// 	exec "waybar"
+// 	exec "kanshi"
+// 	exec "waybar -c ~/.config/waybar/config.jsonc -s ~/.config/waybar/style.css"
 // }

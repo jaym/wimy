@@ -1,0 +1,35 @@
+/* wimy waybar style — dark, wmii-flavored. */
+
+* {
+  font-family: sans-serif;
+  font-size: 13px;
+  min-height: 0;
+}
+
+window#waybar {
+  background: #24273a;
+  color: #cad3f5;
+}
+
+#tags,
+#mode,
+#window,
+#cpu,
+#memory,
+#pulseaudio,
+#network,
+#clock,
+#tray {
+  padding: 0 8px;
+}
+
+#mode {
+  color: #8aadf4;
+}
+
+#window {
+  color: #a5adcb;
+}
+
+/* selected view highlight comes from the pango markup the
+   wimy-tags.sh script emits (#8aadf4 on #1e2030). */

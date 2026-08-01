@@ -151,6 +151,48 @@ be running (e.g. black screen, no bindings): a missing
 `river_window_manager_v1` global means the compositor is river-classic
 (0.3.x), not river 0.4+.
 
+## Waybar
+
+Waybar's built-in `river/*` modules **do not work** with river 0.4 —
+they speak `river-status-unstable-v1`, the river-classic (0.3.x) status
+protocol, which river 0.4 removed (the window manager owns tags and
+windows now). Use the custom modules in [`contrib/waybar/`](contrib/waybar)
+instead — they stream wimy's state over the JSON-RPC socket:
+
+```sh
+mkdir -p ~/.config/waybar ~/.local/bin
+cp contrib/waybar/config.jsonc contrib/waybar/style.css ~/.config/waybar/
+cp contrib/waybar/wimy-*.sh ~/.local/bin/
+```
+
+You get wmii-style tags (click to choose a view, scroll to cycle), the
+column mode, and the focused window title; the rest of the bar
+(clock, battery, tray, …) uses waybar's standard modules as before.
+Start waybar from wimy's autostart:
+
+```kdl
+autostart {
+	exec "waybar -c ~/.config/waybar/config.jsonc -s ~/.config/waybar/style.css"
+}
+```
+
+## Displays: resolution and scale
+
+river does not configure outputs itself — resolution, scale and
+position are set at runtime by an output manager
+(`wlr-output-management`). If your display looks wrong coming from
+sway, that config was sway's; the river equivalent is
+[kanshi](https://sr.ht/~emersion/kanshi/) (or `wlr-randr` for
+one-offs, `wdisplays` for a GUI):
+
+```sh
+cp contrib/kanshi/config ~/.config/kanshi/config   # then edit
+```
+
+and add `exec "kanshi"` to the `autostart` block of `config.kdl`.
+See [`contrib/kanshi/config`](contrib/kanshi/config) for examples
+converting sway-style `output … scale …` lines.
+
 ## Current limitations
 
 - Mouse support (Mod+drag move/resize, click focus) is not implemented

@@ -1,0 +1,33 @@
+# Kanshi configuration for river + wimy.
+#
+# river (like wlroots generally) does not read compositor-specific
+# output settings — resolution, scale and position are configured at
+# runtime by an output manager. kanshi is the standard choice; install
+# it and run it via wimy's autostart:
+#
+#   autostart {
+#   	exec "kanshi"
+#   }
+#
+# Copy this file to ~/.config/kanshi/config and adjust to your
+# hardware. Find output names with: wlr-randr  (or: kanshi -d)
+#
+# A profile applies whenever the listed set of outputs is present.
+
+# Laptop alone, scaled (typical sway equivalent:
+#   output eDP-1 scale 1.5)
+profile laptop {
+	output eDP-1 mode 2880x1800@90.0 scale 1.5 position 0,0
+}
+
+# Laptop + external monitor to the right.
+# Note the logical width of eDP-1 at scale 1.5 is 2880/1.5 = 1920.
+profile docked {
+	output eDP-1 mode 2880x1800@90.0 scale 1.5 position 0,0
+	output "Dell Inc. DELL U2720Q ABC123" mode 3840x2160@60.0 scale 2.0 position 1920,0
+}
+
+# Single external monitor, laptop lid closed.
+profile external-only {
+	output "Dell Inc. DELL U2720Q ABC123" mode 3840x2160@60.0 scale 2.0 position 0,0
+}

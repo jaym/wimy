@@ -1,0 +1,66 @@
+// Waybar configuration for wimy.
+//
+// Waybar's built-in river/* modules do NOT work here: they speak
+// river-status-unstable-v1, the river-classic (0.3.x) status protocol.
+// river 0.4 removed it — the window manager owns tags and windows now.
+// These custom modules stream wimy's state over its JSON-RPC socket
+// instead (wimyctl subscribe).
+//
+// Install:
+//   mkdir -p ~/.config/waybar
+//   cp config.jsonc style.css ~/.config/waybar/
+//   cp wimy-*.sh ~/.local/bin/        # or adjust exec paths below
+//   waybar -c ~/.config/waybar/config.jsonc -s ~/.config/waybar/style.css
+//
+// Waybar runs exec via the shell; scripts must be in PATH or absolute.
+{
+  "layer": "top",
+  "position": "bottom", // wmii-style bottom bar; "top" works too
+  "height": 26,
+  "spacing": 8,
+
+  "modules-left": ["custom/tags", "custom/mode"],
+  "modules-center": ["custom/window"],
+  "modules-right": ["cpu", "memory", "pulseaudio", "network", "clock", "tray"],
+
+  "custom/tags": {
+    "exec": "wimy-tags.sh",
+    "return-type": "json",
+    // click: choose a view by name with the menu (Mod-t equivalent)
+    "on-click": "wimyctl run view",
+    "on-scroll-up": "wimyctl run view-prev",
+    "on-scroll-down": "wimyctl run view-next"
+  },
+
+  "custom/mode": {
+    "exec": "wimy-mode.sh",
+    "return-type": "json",
+    "format": "[{}]",
+    // cycle column modes on click
+    "on-click": "wimyctl run mode stack",
+    "on-click-right": "wimyctl run mode default",
+    "on-click-middle": "wimyctl run mode max"
+  },
+
+  "custom/window": {
+    "exec": "wimy-window.sh",
+    "return-type": "json",
+    "escape": true,
+    "max-length": 80
+  },
+
+  "cpu": { "format": "cpu {usage}%" },
+  "memory": { "format": "mem {}%" },
+  "pulseaudio": {
+    "format": "vol {volume}%",
+    "format-muted": "muted",
+    "on-click": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
+  },
+  "network": {
+    "format-wifi": "{essid} {signalStrength}%",
+    "format-ethernet": "wired",
+    "format-disconnected": "offline"
+  },
+  "clock": { "format": "{:%a %Y-%m-%d %H:%M}" },
+  "tray": { "spacing": 6 }
+}

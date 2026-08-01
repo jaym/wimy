@@ -1,35 +1,210 @@
-/* wimy waybar style — dark, wmii-flavored. */
+/* ==========================================================================
+   wimy — waybar theme
+   Catppuccin Macchiato, wmii flat: square edges everywhere, hairline
+   separators instead of gaps, a 2px accent underline on hover.
+
+   Matches wimy's own chrome (border/titlebar defaults in config.kdl) and
+   contrib/fuzzel/fuzzel.ini, so the bar, the borders, the titlebars and
+   the launcher all share one palette.
+   ========================================================================== */
+
+@define-color base 	#24273a;
+@define-color mantle 	#1e2030;
+@define-color surface0 	#363a4f;
+@define-color surface1 	#494d64;
+@define-color overlay0 	#6e738d;
+@define-color overlay1 	#8087a2;
+@define-color subtext0 	#a5adcb;
+@define-color subtext1 	#b8c0e0;
+@define-color text 	#cad3f5;
+@define-color blue 	#8aadf4;
+@define-color lavender 	#b7bdf8;
+@define-color teal 	#8bd5ca;
+@define-color green 	#a6da95;
+@define-color yellow 	#eed49f;
+@define-color peach 	#f5a97f;
+@define-color red 	#ed8796;
+@define-color mauve 	#c6a0f6;
 
 * {
-  font-family: sans-serif;
-  font-size: 24px;
+  font-family: "JetBrainsMono Nerd Font", "Symbols Nerd Font", sans-serif;
+  font-size: 16px;
+  font-weight: 500;
   min-height: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  text-shadow: none;
 }
 
+/* The bar itself. The rule sits on the window side of the bar — flip this
+   to border-bottom if you move the bar to "position": "top". 2px so it
+   still reads on fractionally-scaled outputs, and to match wimy's own
+   `border width=2`. */
 window#waybar {
-  background: #24273a;
-  color: #cad3f5;
+  background: @base;
+  color: @text;
+  border-top: 2px solid @surface0;
 }
 
-#tags,
-#mode,
-#window,
+window#waybar.hidden {
+  opacity: 0;
+}
+
+tooltip {
+  background: @mantle;
+  border: 1px solid @surface0;
+  color: @text;
+}
+
+tooltip label {
+  color: @text;
+  padding: 2px 4px;
+}
+
+/* --- shared module box ---------------------------------------------------
+   Every module is a flat slab: no background, no radius, uniform padding. */
+
+#custom-tags,
+#custom-mode,
+#custom-window,
+#tray,
+#idle_inhibitor,
 #cpu,
 #memory,
+#temperature,
 #pulseaudio,
 #network,
-#clock,
+#clock {
+  padding: 0 10px;
+  background: transparent;
+  color: @subtext0;
+}
+
+/* --- left: tags ----------------------------------------------------------
+   The blocks come from pango markup in wimy-tags.sh (a label can't be
+   styled per-tag from CSS), so this only sets the outer box. */
+
+#custom-tags {
+  padding: 0 6px;
+  color: @text;
+}
+
+#custom-tags:hover {
+  background: @mantle;
+}
+
+/* --- left: column mode --------------------------------------------------- */
+
+#custom-mode {
+  color: @blue;
+  padding-left: 6px;
+}
+
+#custom-mode.stack {
+  color: @yellow;
+}
+
+#custom-mode.max {
+  color: @peach;
+}
+
+#custom-mode:hover {
+  background: @mantle;
+  box-shadow: inset 0 -2px @blue;
+}
+
+/* --- center: focused window ---------------------------------------------- */
+
+#custom-window {
+  color: @subtext0;
+}
+
+#custom-window.floating {
+  color: @mauve;
+  font-style: italic;
+}
+
+#custom-window:hover {
+  color: @text;
+}
+
+/* --- right: status -------------------------------------------------------
+   Hairline separators between the status modules. tray and idle_inhibitor
+   are deliberately left out: tray collapses to zero width when it holds
+   nothing, and a leading rule would then hang in empty space. */
+
+#cpu,
+#memory,
+#temperature,
+#pulseaudio,
+#network,
+#clock {
+  border-left: 1px solid @surface1;
+}
+
+#idle_inhibitor:hover,
+#cpu:hover,
+#memory:hover,
+#temperature:hover,
+#pulseaudio:hover,
+#network:hover,
+#clock:hover {
+  background: @mantle;
+  color: @text;
+  box-shadow: inset 0 -2px @blue;
+}
+
+#clock {
+  color: @text;
+  padding-right: 14px;
+}
+
+#idle_inhibitor.activated {
+  color: @peach;
+}
+
+#cpu.warning,
+#memory.warning {
+  color: @yellow;
+}
+
+#cpu.critical,
+#memory.critical {
+  color: @red;
+}
+
+#temperature.critical {
+  color: @red;
+}
+
+#pulseaudio.muted,
+#pulseaudio.bluetooth-muted {
+  color: @overlay0;
+}
+
+#network.disconnected,
+#network.linked {
+  color: @red;
+}
+
+/* --- tray ---------------------------------------------------------------- */
+
 #tray {
   padding: 0 8px;
 }
 
-#mode {
-  color: #8aadf4;
+#tray > .passive {
+  -gtk-icon-effect: dim;
 }
 
-#window {
-  color: #a5adcb;
+#tray > .needs-attention {
+  -gtk-icon-effect: highlight;
+  background: @red;
 }
 
-/* selected view highlight comes from the pango markup the
-   wimy-tags.sh script emits (#8aadf4 on #1e2030). */
+#tray menu {
+  background: @mantle;
+  color: @text;
+  border: 1px solid @surface0;
+}

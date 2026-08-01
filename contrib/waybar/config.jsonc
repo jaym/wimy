@@ -3,65 +3,165 @@
 // Waybar's built-in river/* modules do NOT work here: they speak
 // river-status-unstable-v1, the river-classic (0.3.x) status protocol.
 // river 0.4 removed it — the window manager owns tags and windows now.
-// These custom modules stream wimy's state over its JSON-RPC socket
-// instead (wimyctl subscribe).
+// The custom/* modules below stream wimy's state over its JSON-RPC socket
+// instead (see the wimy-*.sh helpers next to this file).
 //
-// Install (Arch package: /usr/share/wimy/contrib/waybar):
-//   mkdir -p ~/.config/waybar
-//   cp /usr/share/wimy/contrib/waybar/{config.jsonc,style.css} ~/.config/waybar/
-//   waybar
+// Install into a directory of its own — NOT ~/.config/waybar, which is
+// shared with any other compositor's bar:
 //
-// From a git checkout, either copy wimy-*.sh into PATH (~/.local/bin)
-// or adjust the exec paths below to the checkout location.
-// Waybar runs exec via the shell; scripts must be in PATH or absolute.
+//   ./install.sh                    # -> ~/.config/waybar-wimy
+//   ~/.config/waybar-wimy/wimy-bar  # start it
+//
+// wimy-bar exports $WIMYBAR so the exec lines below resolve to the helpers
+// sitting beside this config, wherever it was installed. The fallback is
+// the Arch package path, so `waybar -c/-s` by hand works too.
 {
   "layer": "top",
-  "position": "bottom", // wmii-style bottom bar; "top" works too
-  "height": 26,
-  "spacing": 8,
+  "position": "bottom", // wmii-style bottom bar; "top" works too (see style.css)
+  "height": 30,
+  "spacing": 0, // module separators are CSS hairlines, not gaps
+  "fixed-center": true,
+  "reload_style_on_change": true,
 
   "modules-left": ["custom/tags", "custom/mode"],
   "modules-center": ["custom/window"],
-  "modules-right": ["cpu", "memory", "pulseaudio", "network", "clock", "tray"],
+  "modules-right": [
+    "tray",
+    "idle_inhibitor",
+    "cpu",
+    "memory",
+    "temperature",
+    "pulseaudio",
+    "network",
+    "clock"
+  ],
+
+  // --- wimy ---------------------------------------------------------------
 
   "custom/tags": {
-    "exec": "/usr/share/wimy/contrib/waybar/wimy-tags.sh",
+    "exec": "\"${WIMYBAR:-/usr/share/wimy/contrib/waybar}\"/wimy-tags.sh",
     "return-type": "json",
-    // click: choose a view by name with the menu (Mod-t equivalent)
-    "on-click": "wimyctl run view",
+    "escape": false, // the script emits pango markup
+    "on-click": "wimyctl run view", // pick a view by name (Mod-t)
+    "on-click-right": "wimyctl run moveto", // send focused window to a view (Mod-Shift-t)
     "on-scroll-up": "wimyctl run view-prev",
     "on-scroll-down": "wimyctl run view-next"
   },
 
   "custom/mode": {
-    "exec": "/usr/share/wimy/contrib/waybar/wimy-mode.sh",
+    "exec": "\"${WIMYBAR:-/usr/share/wimy/contrib/waybar}\"/wimy-mode.sh",
     "return-type": "json",
-    "format": "[{}]",
-    // cycle column modes on click
-    "on-click": "wimyctl run mode stack",
+    "on-click": "\"${WIMYBAR:-/usr/share/wimy/contrib/waybar}\"/wimy-mode.sh --cycle",
     "on-click-right": "wimyctl run mode default",
     "on-click-middle": "wimyctl run mode max"
   },
 
   "custom/window": {
-    "exec": "/usr/share/wimy/contrib/waybar/wimy-window.sh",
+    "exec": "\"${WIMYBAR:-/usr/share/wimy/contrib/waybar}\"/wimy-window.sh",
     "return-type": "json",
-    "escape": true,
-    "max-length": 80
+    "escape": true, // titles are plain text; let waybar escape them
+    "max-length": 90,
+    "on-click": "wimyctl run toggle-float"
   },
 
-  "cpu": { "format": "cpu {usage}%" },
-  "memory": { "format": "mem {}%" },
+  // --- status -------------------------------------------------------------
+
+  "tray": {
+    "icon-size": 18,
+    "spacing": 10
+  },
+
+  "idle_inhibitor": {
+    "format": "{icon}",
+    "format-icons": {
+      "activated": "󰅶",
+      "deactivated": "󰒲"
+    },
+    "tooltip-format-activated": "idle inhibited — the screen stays on",
+    "tooltip-format-deactivated": "idle inhibitor off"
+  },
+
+  "cpu": {
+    "interval": 3,
+    "format": "<span foreground='#8aadf4'>󰻠</span> {usage}%",
+    "states": { "warning": 70, "critical": 90 },
+    "tooltip-format": "cpu {usage}%  ·  load {load}",
+    "on-click": "alacritty -e htop"
+  },
+
+  "memory": {
+    "interval": 5,
+    "format": "<span foreground='#c6a0f6'>󰍛</span> {used:0.1f}G",
+    "states": { "warning": 80, "critical": 92 },
+    "tooltip-format": "{used:0.1f}G / {total:0.1f}G  ({percentage}%)\nswap {swapUsed:0.1f}G / {swapTotal:0.1f}G",
+    "on-click": "alacritty -e htop"
+  },
+
+  // k10temp Tctl. hwmon numbering is not stable across boots, so anchor on
+  // the PCI device path and let waybar find the hwmon* child.
+  "temperature": {
+    "interval": 5,
+    "hwmon-path-abs": "/sys/devices/pci0000:00/0000:00:18.3/hwmon",
+    "input-filename": "temp1_input",
+    "critical-threshold": 85,
+    "format": "<span foreground='#8bd5ca'>󰔏</span> {temperatureC}°",
+    "format-critical": "<span foreground='#ed8796'>󰔏</span> {temperatureC}°",
+    "tooltip-format": "cpu package (Tctl) {temperatureC}°C"
+  },
+
   "pulseaudio": {
-    "format": "vol {volume}%",
-    "format-muted": "muted",
-    "on-click": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
+    "format": "<span foreground='#eed49f'>{icon}</span> {volume}%",
+    "format-muted": "󰝟 muted",
+    "format-bluetooth": "<span foreground='#8aadf4'>󰂯</span> {volume}%",
+    "format-bluetooth-muted": "󰂲 muted",
+    "format-icons": {
+      "headphone": "󰋋",
+      "hands-free": "󰋎",
+      "headset": "󰋎",
+      "phone": "󰏲",
+      "portable": "󰏲",
+      "car": "󰄋",
+      "default": ["󰕿", "󰖀", "󰕾"]
+    },
+    "scroll-step": 5,
+    "tooltip-format": "{desc}\n{volume}%",
+    "on-click": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
+    "on-click-right": "pavucontrol"
   },
+
+  // No markup here: an ESSID containing & would break the label.
+  // style.css colours the whole module instead.
   "network": {
-    "format-wifi": "{essid} {signalStrength}%",
-    "format-ethernet": "wired",
-    "format-disconnected": "offline"
+    "interval": 5,
+    "format-wifi": "󰤨 {essid} {signalStrength}%",
+    "format-ethernet": "󰈀 {ifname}",
+    "format-linked": "󰈀 {ifname} (no IP)",
+    "format-disconnected": "󰤭 offline",
+    "tooltip-format": "{ifname}\n{ipaddr}/{cidr}\nvia {gwaddr}",
+    "tooltip-format-disconnected": "disconnected",
+    "on-click": "nm-connection-editor"
   },
-  "clock": { "format": "{:%a %Y-%m-%d %H:%M}" },
-  "tray": { "spacing": 6 }
+
+  "clock": {
+    "interval": 1,
+    "format": "<span foreground='#b7bdf8'>󰥔</span> {:%a %d %b  %H:%M:%S}",
+    "format-alt": "<span foreground='#b7bdf8'>󰥔</span> {:%Y-%m-%d %H:%M:%S}",
+    "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>",
+    "calendar": {
+      "mode": "month",
+      "weeks-pos": "right",
+      "format": {
+        "months": "<span color='#cad3f5'><b>{}</b></span>",
+        "days": "<span color='#a5adcb'>{}</span>",
+        "weeks": "<span color='#8bd5ca'>W{}</span>",
+        "weekdays": "<span color='#eed49f'><b>{}</b></span>",
+        "today": "<span color='#8aadf4'><b><u>{}</u></b></span>"
+      }
+    },
+    "actions": {
+      "on-click": "mode", // toggle format <-> format-alt
+      "on-scroll-up": "shift_up", // page the tooltip calendar
+      "on-scroll-down": "shift_down"
+    }
+  }
 }

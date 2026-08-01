@@ -1,0 +1,17 @@
+#!/bin/sh
+# wimy-bar — start waybar with the wimy configuration living next to this
+# script, wherever that is (a git checkout, /usr/share/wimy/contrib/waybar,
+# or ~/.config/waybar-wimy).
+#
+# It exports WIMYBAR so config.jsonc can locate the wimy-*.sh helpers
+# without any absolute paths baked in, and points waybar at this directory
+# instead of ~/.config/waybar — which stays free for other compositors.
+#
+# Extra arguments are passed through to waybar, e.g.
+#   wimy-bar --log-level debug
+set -eu
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+export WIMYBAR="$dir"
+
+exec waybar -c "$dir/config.jsonc" -s "$dir/style.css" "$@"

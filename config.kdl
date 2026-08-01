@@ -22,6 +22,10 @@ terminal "alacritty"
 launcher "fuzzel --anchor top --width 120 --lines 10 --border-radius 0"
 menu "fuzzel --dmenu --anchor top --width 120 --lines 10 --border-radius 0"
 
+// Focus follows the mouse (sloppy focus): hovering a window focuses
+// it; clicking still focuses too. Set to false for click-to-focus.
+focus-follows-mouse true
+
 // Focus borders drawn by the compositor.
 border width=2 focused="#8aadf4" normal="#363a4f"
 

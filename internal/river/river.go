@@ -376,7 +376,7 @@ func (b *Backend) HandleRiverWindowManagerV1RenderStart(ctx context.Context) {
 }
 
 // syncModel applies compositor-side changes to the model: new and
-// removed outputs/windows, geometry changes, click focus.
+// removed outputs/windows, geometry changes, pointer focus.
 func (b *Backend) syncModel() {
 	// outputs
 	for _, o := range b.outputs {
@@ -432,6 +432,21 @@ func (b *Backend) syncModel() {
 
 	// seats
 	for _, s := range b.seats {
+		if w := s.FocusHovered; w != nil {
+			s.FocusHovered = nil
+			// Sloppy focus: the pointer focuses the window it
+			// enters, but only when the pointer actually moved —
+			// river also sends pointer_enter when a layout change
+			// moves a window under a resting pointer, and those
+			// must not steal focus from keyboard-driven changes.
+			// Interactive ops are excluded too so a drag crossing
+			// other windows doesn't steal focus.
+			moved := s.PointerX != s.LastX || s.PointerY != s.LastY
+			if b.cfg.FocusFollowsMouse && moved && s.Op == nil && w.ID != b.state.Focused {
+				b.state.FocusWindow(w.ID)
+			}
+		}
+		s.LastX, s.LastY = s.PointerX, s.PointerY
 		if s.Interacted != nil {
 			b.state.FocusWindow(s.Interacted.ID)
 			s.Interacted = nil

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# End-to-end mouse test: Mod+drag column resize, floating move and
-# corner resize via virtual pointer, plus the grow keybinding.
+# End-to-end mouse test: sloppy focus (hover), Mod+drag column resize,
+# floating move and corner resize via virtual pointer, plus the grow
+# keybinding.
 set -u
 cd "$(dirname "$0")"
 go build -o bin/wimy ./cmd/wimy && go build -o bin/ptrinject ./cmd/ptrinject && go build -o bin/keyinject ./cmd/keyinject || exit 1
@@ -65,6 +66,25 @@ sleep 0.5
 AFTER2=$(winrect 2)
 W1=$(echo "$AFTER2" | cut -d, -f3); H1=$(echo "$AFTER2" | cut -d, -f4)
 check "float window resized by corner drag" "$([ "$W1" -gt "$W0" ] && [ "$H1" -gt "$H0" ] && echo yes)" yes
+
+# --- sloppy focus: hover focuses without clicking ---
+# window 1 is tiled (full width), window 2 floats on top; hover a
+# point over window 1 that the floating window does not cover.
+wincenter() { ctl state | jq -r --argjson id "$1" '[.windows[] | select(.id==$id)][0].rect | "\(.X + (.W/2|floor)),\(.Y + (.H/2|floor))"'; }
+focused() { ctl state | jq '[.windows[] | select(.focused)][0].id'; }
+R2X=$(ctl state | jq -r '[.windows[] | select(.id==2)][0].rect.X')
+P1="$((R2X - 40)),600"
+P2=$(wincenter 2)
+./bin/ptrinject -from "$P1" -to "${P1%,*},$(( ${P1#*,} + 15 ))" -button none
+sleep 0.5
+check "hover focuses tiled window" "$(focused)" 1
+./bin/ptrinject -from "$P2" -to "${P2%,*},$(( ${P2#*,} + 15 ))" -button none
+sleep 0.5
+check "hover focuses floating window" "$(focused)" 2
+# pointer rests over window 2; a keyboard focus command must not be
+# overridden by the resting pointer
+ctl run 'focus-window 1' >/dev/null; sleep 0.3
+check "keyboard focus wins over resting pointer" "$(focused)" 1
 
 kill $RIVER_PID 2>/dev/null; wait $RIVER_PID 2>/dev/null
 echo "== mouse PASS=$PASS FAIL=$FAIL =="

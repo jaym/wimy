@@ -11,7 +11,8 @@ export WLR_HEADLESS_OUTPUTS=2
 cleanup() { [ -n "${RIVER_PID:-}" ] && kill "$RIVER_PID" 2>/dev/null; wait "$RIVER_PID" 2>/dev/null; }
 trap cleanup EXIT
 
-river -log-level warning -c ./bin/wimy >"$RT/river.log" 2>&1 &
+printf 'terminal "foot"\n' > "$RT/config.kdl"
+river -log-level warning -c "./bin/wimy -config $RT/config.kdl" >"$RT/river.log" 2>&1 &
 RIVER_PID=$!
 SOCK=""
 for i in $(seq 1 50); do

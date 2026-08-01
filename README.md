@@ -103,7 +103,12 @@ All bindings are remappable; the defaults (wmii's set):
 
 ## Mouse
 
-- **Click** a window to focus it (floating windows raise).
+Focus **follows the mouse** (sloppy focus): hovering a window focuses
+it, in the tiled and floating layers alike; the pointer leaving all
+windows keeps the last focus. Clicking a window focuses it too. Set
+`focus-follows-mouse false` in config.kdl for plain click-to-focus.
+Focusing a floating window raises it above the other floats.
+
 - **Mod+left-drag** on a floating window: move it.
 - **Mod+right-drag** on a floating window: resize it — corners resize
   two edges, sides one.

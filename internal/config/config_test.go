@@ -14,6 +14,7 @@ mod "Mod1"
 terminal "foot"
 menu "bemenu-run"
 stack-strip 32
+focus-follows-mouse false
 border width=3 focused="#ff0000" normal="#00ff0080"
 
 bind "Mod-Return" { spawn "foot"; }
@@ -41,6 +42,9 @@ autostart {
 	}
 	if c.StackStrip != 32 {
 		t.Errorf("stack-strip: %d", c.StackStrip)
+	}
+	if c.FocusFollowsMouse {
+		t.Errorf("focus-follows-mouse should be false")
 	}
 	if c.Border.Width != 3 {
 		t.Errorf("border width: %d", c.Border.Width)
@@ -84,6 +88,9 @@ func TestLoadMissingDefaultPathOK(t *testing.T) {
 
 func TestDefaultsHaveWmiiBindings(t *testing.T) {
 	c := Default()
+	if !c.FocusFollowsMouse {
+		t.Errorf("default focus-follows-mouse should be true")
+	}
 	want := map[string]bool{
 		"Mod-Return": false, "Mod-p": false, "Mod-a": false, "Mod-Shift-c": false,
 		"Mod-h": false, "Mod-l": false, "Mod-j": false, "Mod-k": false,

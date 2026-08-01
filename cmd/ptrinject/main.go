@@ -5,7 +5,8 @@
 //	ptrinject -from 700,360 -to 900,360 -button right -mod
 //
 // It moves to -from, presses the modifier (if -mod) and button, drags
-// to -to in steps, then releases.
+// to -to in steps, then releases. With -button none it only moves the
+// pointer (hover, no click).
 package main
 
 import (
@@ -80,7 +81,7 @@ func keymapFD() (int, int, error) {
 func main() {
 	from := flag.String("from", "", "start point x,y")
 	to := flag.String("to", "", "end point x,y")
-	button := flag.String("button", "left", "left or right")
+	button := flag.String("button", "left", "left, right or none (hover only)")
 	mod := flag.Bool("mod", false, "hold Mod4 (logo) during the drag")
 	steps := flag.Int("steps", 8, "drag motion steps")
 	extent := flag.String("extent", "1280,720", "layout coordinate space w,h (must match the compositor's layout size)")
@@ -99,8 +100,11 @@ func main() {
 		log.Fatal(err)
 	}
 	btn := uint32(btnLeft)
-	if *button == "right" {
+	switch *button {
+	case "right":
 		btn = btnRight
+	case "none":
+		btn = 0
 	}
 
 	ctx := context.Background()
@@ -148,8 +152,10 @@ func main() {
 	if *mod {
 		vkbd.Key(next(), keyLogo, 1)
 	}
-	vptr.Button(next(), btn, 1)
-	vptr.Frame()
+	if btn != 0 {
+		vptr.Button(next(), btn, 1)
+		vptr.Frame()
+	}
 	if err := conn.Flush(); err != nil {
 		log.Fatal(err)
 	}
@@ -165,8 +171,10 @@ func main() {
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	vptr.Button(next(), btn, 0)
-	vptr.Frame()
+	if btn != 0 {
+		vptr.Button(next(), btn, 0)
+		vptr.Frame()
+	}
 	if *mod {
 		vkbd.Key(next(), keyLogo, 0)
 	}

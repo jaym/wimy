@@ -206,8 +206,16 @@ type Seat struct {
 
 	Interacted *Window
 	Hovered    *Window
-	PointerX   int32
-	PointerY   int32
+	// FocusHovered is the window the pointer entered since the last
+	// manage sequence; consumed by syncModel for sloppy focus.
+	FocusHovered *Window
+	PointerX     int32
+	PointerY     int32
+	// LastX/LastY is the pointer position as of the previous manage
+	// sequence, used to tell motion-caused enters from enters caused
+	// by layout changes under a resting pointer.
+	LastX int32
+	LastY int32
 
 	Op         SeatOp
 	OpDx, OpDy int32
@@ -219,6 +227,7 @@ func (s *Seat) HandleRiverSeatV1Removed(ctx context.Context) { s.Removed = true 
 func (s *Seat) HandleRiverSeatV1PointerEnter(ctx context.Context, window proto.RiverWindowV1) {
 	if w, ok := window.UserData().(*Window); ok {
 		s.Hovered = w
+		s.FocusHovered = w
 	}
 }
 

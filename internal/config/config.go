@@ -90,17 +90,20 @@ const (
 
 // Config is the resolved wimy configuration.
 type Config struct {
-	Mod        string // name of the primary modifier: Mod1..Mod5 (default Mod4)
-	ModMask    uint32 // mask of the primary modifier
-	Terminal   string
-	Launcher   string // program launcher (Mod-p)
-	Menu       string // dmenu-compatible prompter (tag/action prompts)
-	Border     Border
-	Titlebar   Titlebar
-	StackStrip int32
-	Binds      []Bind
-	Actions    map[string]string // name -> shell command
-	Autostart  []string
+	Mod      string // name of the primary modifier: Mod1..Mod5 (default Mod4)
+	ModMask  uint32 // mask of the primary modifier
+	Terminal string
+	Launcher string // program launcher (Mod-p)
+	Menu     string // dmenu-compatible prompter (tag/action prompts)
+	// FocusFollowsMouse makes the pointer focus windows it enters
+	// (sloppy focus); when false only clicks focus.
+	FocusFollowsMouse bool
+	Border            Border
+	Titlebar          Titlebar
+	StackStrip        int32
+	Binds             []Bind
+	Actions           map[string]string // name -> shell command
+	Autostart         []string
 }
 
 // Default returns the built-in configuration: wmii's key binding set
@@ -108,9 +111,10 @@ type Config struct {
 // classic feel).
 func Default() *Config {
 	c := &Config{
-		Mod:      "Mod4",
-		ModMask:  Mod4,
-		Terminal: "alacritty",
+		Mod:               "Mod4",
+		ModMask:           Mod4,
+		Terminal:          "alacritty",
+		FocusFollowsMouse: true,
 		// dmenu-style: a bar anchored to the top screen edge
 		Launcher:   "fuzzel --anchor top --width 120 --lines 10 --border-radius 0",
 		Menu:       "fuzzel --dmenu --anchor top --width 120 --lines 10 --border-radius 0",
@@ -295,6 +299,16 @@ func (c *Config) applyNode(n *document.Node) error {
 			return err
 		}
 		c.Menu = m
+
+	case "focus-follows-mouse":
+		if len(n.Arguments) < 1 {
+			return fmt.Errorf("focus-follows-mouse: missing true/false")
+		}
+		v, ok := n.Arguments[0].Value.(bool)
+		if !ok {
+			return fmt.Errorf("focus-follows-mouse: want true or false")
+		}
+		c.FocusFollowsMouse = v
 
 	case "stack-strip":
 		if len(n.Arguments) < 1 {

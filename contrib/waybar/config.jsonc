@@ -6,12 +6,13 @@
 // These custom modules stream wimy's state over its JSON-RPC socket
 // instead (wimyctl subscribe).
 //
-// Install:
+// Install (Arch package: /usr/share/wimy/contrib/waybar):
 //   mkdir -p ~/.config/waybar
-//   cp config.jsonc style.css ~/.config/waybar/
-//   cp wimy-*.sh ~/.local/bin/        # or adjust exec paths below
-//   waybar -c ~/.config/waybar/config.jsonc -s ~/.config/waybar/style.css
+//   cp /usr/share/wimy/contrib/waybar/{config.jsonc,style.css} ~/.config/waybar/
+//   waybar
 //
+// From a git checkout, either copy wimy-*.sh into PATH (~/.local/bin)
+// or adjust the exec paths below to the checkout location.
 // Waybar runs exec via the shell; scripts must be in PATH or absolute.
 {
   "layer": "top",
@@ -24,7 +25,7 @@
   "modules-right": ["cpu", "memory", "pulseaudio", "network", "clock", "tray"],
 
   "custom/tags": {
-    "exec": "wimy-tags.sh",
+    "exec": "/usr/share/wimy/contrib/waybar/wimy-tags.sh",
     "return-type": "json",
     // click: choose a view by name with the menu (Mod-t equivalent)
     "on-click": "wimyctl run view",
@@ -33,7 +34,7 @@
   },
 
   "custom/mode": {
-    "exec": "wimy-mode.sh",
+    "exec": "/usr/share/wimy/contrib/waybar/wimy-mode.sh",
     "return-type": "json",
     "format": "[{}]",
     // cycle column modes on click
@@ -43,7 +44,7 @@
   },
 
   "custom/window": {
-    "exec": "wimy-window.sh",
+    "exec": "/usr/share/wimy/contrib/waybar/wimy-window.sh",
     "return-type": "json",
     "escape": true,
     "max-length": 80

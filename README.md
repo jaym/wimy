@@ -26,6 +26,24 @@ wimy — a separate client process speaking the stable
 - **KDL configuration** with comments; external bar and launcher.
 - No cgo: pure Go via [wlcl](https://codeberg.org/vyivel/wlcl).
 
+## Installing on Arch Linux
+
+[`contrib/arch/PKGBUILD`](contrib/arch/PKGBUILD) builds a pacman
+package from this checkout (commit first — it packages the committed
+state):
+
+```sh
+cd contrib/arch
+makepkg -si          # installs wimy-git; remove with pacman -R wimy-git
+```
+
+You get `wimy` and `wimyctl` in `/usr/bin`, the example config in
+`/usr/share/doc/wimy/`, the contrib files (waybar modules, fuzzel and
+kanshi configs) in `/usr/share/wimy/contrib/`, and a "River (wimy)"
+session entry for display managers. pacman pulls in `river` (0.4+)
+and the build tools; waybar/fuzzel/kanshi/alacritty are optional
+dependencies. From a TTY, start with `river -c wimy`.
+
 ## Building
 
 ```sh

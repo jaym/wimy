@@ -1,0 +1,5 @@
+[Desktop Entry]
+Name=River (wimy)
+Comment=River Wayland compositor with the wimy window manager
+Exec=river -c /usr/bin/wimy
+Type=Application

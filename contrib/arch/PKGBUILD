@@ -1,0 +1,71 @@
+# wimy package for Arch Linux.
+#
+# This PKGBUILD builds the git checkout it lives in (committed state):
+#
+#     cd contrib/arch
+#     makepkg -si
+#
+# Commit before running — uncommitted changes are not packaged.
+# To publish (e.g. the AUR), point the source at the remote instead:
+#     source=("${_pkg}::git+https://github.com/jaym/wimy.git")
+
+pkgname=wimy-git
+_pkg=wimy
+pkgver=r11.gc3c727b
+pkgrel=1
+pkgdesc="wmii-style window manager for the river Wayland compositor (0.4+)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/jaym/wimy"
+license=('custom')
+depends=('river>=0.4')
+makedepends=('git' 'go')
+optdepends=(
+	'alacritty: default terminal (Mod-Return)'
+	'fuzzel: program launcher and dmenu-style prompts'
+	'waybar: status bar (modules in /usr/share/wimy/contrib/waybar)'
+	'kanshi: output resolution/scale/position'
+	'foot: alternative terminal'
+)
+provides=('wimy')
+conflicts=('wimy')
+options=('!debug')  # debugedit chokes on Go's DWARF; a debug split is useless here
+
+_src_root="$(realpath "$PWD/../..")"
+source=("${_pkg}::git+file://${_src_root}")
+sha256sums=('SKIP')
+
+pkgver() {
+	cd "$_pkg"
+	printf "r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+	cd "$_pkg"
+	export CGO_ENABLED=0
+	export GOFLAGS="-trimpath -mod=readonly -modcacherw"
+	export GOMODCACHE="$srcdir/gomod"
+	export GOCACHE="$srcdir/gocache"
+	go build -o bin/wimy ./cmd/wimy
+	go build -o bin/wimyctl ./cmd/wimyctl
+}
+
+check() {
+	cd "$_pkg"
+	export CGO_ENABLED=0 GOMODCACHE="$srcdir/gomod" GOCACHE="$srcdir/gocache"
+	go test ./...
+}
+
+package() {
+	cd "$_pkg"
+	install -Dm755 bin/wimy "$pkgdir/usr/bin/wimy"
+	install -Dm755 bin/wimyctl "$pkgdir/usr/bin/wimyctl"
+
+	install -Dm644 README.md "$pkgdir/usr/share/doc/wimy/README.md"
+	install -Dm644 config.kdl "$pkgdir/usr/share/doc/wimy/config.kdl"
+
+	install -d "$pkgdir/usr/share/wimy/contrib"
+	cp -a contrib/{fuzzel,kanshi,waybar} "$pkgdir/usr/share/wimy/contrib/"
+
+	install -Dm644 contrib/arch/river-wimy.desktop \
+		"$pkgdir/usr/share/wayland-sessions/river-wimy.desktop"
+}

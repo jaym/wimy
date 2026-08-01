@@ -357,13 +357,46 @@ func TestViewNumbering(t *testing.T) {
 	if s.activeView().Name != "3" {
 		t.Fatalf("expected view 3, got %q", s.activeView().Name)
 	}
-	s.SelectViewN(1) // first view in creation order = "1"
+	s.SelectViewN(1) // resolves by name to existing view "1"
 	if s.activeView().Name != "1" {
 		t.Fatalf("expected view 1, got %q", s.activeView().Name)
 	}
-	s.MoveToViewN(3) // 3 <= len(Views)=2? no: views are "1","3" -> n=3 -> name "3"
+	s.MoveToViewN(3) // resolves by name to view "3"
 	if !s.Windows[1].HasTag("3") {
 		t.Fatalf("window should have moved to view 3: %v", s.Windows[1].TagList())
+	}
+}
+
+func TestSelectViewNEmptyViews(t *testing.T) {
+	// Regression: gcViews compacts the Views slice; view-n must still
+	// resolve by name, not by position. New session, no windows:
+	// 1 -> 2 -> back to 1.
+	s := NewState()
+	o := s.AddOutput("HDMI-A-1")
+	o.Rect = Rect{X: 0, Y: 0, W: 1280, H: 720}
+	s.SelectViewN(2)
+	if s.activeView().Name != "2" {
+		t.Fatalf("expected view 2, got %q", s.activeView().Name)
+	}
+	s.SelectViewN(1)
+	if s.activeView().Name != "1" {
+		t.Fatalf("expected view 1, got %q", s.activeView().Name)
+	}
+}
+
+func TestSelectViewNAfterMiddleViewGC(t *testing.T) {
+	// Regression: with a window pinning view "1", going 1 -> 2 -> 3
+	// destroys empty view "2"; view-n 2 must recreate it, not alias
+	// the current view.
+	s := newTestState(t)
+	s.SelectViewN(2)
+	s.SelectViewN(3)
+	if s.activeView().Name != "3" {
+		t.Fatalf("expected view 3, got %q", s.activeView().Name)
+	}
+	s.SelectViewN(2)
+	if s.activeView().Name != "2" {
+		t.Fatalf("expected view 2, got %q", s.activeView().Name)
 	}
 }
 

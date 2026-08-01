@@ -551,18 +551,16 @@ func (s *State) CycleView(delta int) {
 	}
 }
 
-// viewByNumber resolves a 1-based view number: the nth existing view
-// in creation order, or — if fewer than n views exist — the view named
-// after the number itself (created on demand). n==0 means 10.
+// viewByNumber resolves a 1-based view number to the view named after
+// the number, creating it on demand. n==0 means 10. Resolution is by
+// name, not position: gcViews compacts the Views slice as empty views
+// come and go, so positions do not correspond to numbers.
 func (s *State) viewByNumber(n int) *View {
 	if n == 0 {
 		n = 10
 	}
 	if n < 0 {
 		return nil
-	}
-	if n <= len(s.Views) {
-		return s.Views[n-1]
 	}
 	return s.ensureView(strconv.Itoa(n))
 }

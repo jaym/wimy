@@ -39,6 +39,12 @@ echo "socket: $SOCK (display $WAYLAND_DISPLAY)"
 ctl() { ./bin/wimyctl -socket "$SOCK" "$@"; }
 sleep 0.5
 
+# --- view-n through empty views (regression: GC compaction) -------
+ctl run 'view-n 2' >/dev/null
+check "view-n 2 on empty session" "$(ctl state | jq -r '.outputs[0].view')" 2
+ctl run 'view-n 1' >/dev/null
+check "view-n 1 back from empty view 2" "$(ctl state | jq -r '.outputs[0].view')" 1
+
 # --- client spawn -------------------------------------------------
 ctl run 'spawn foot' >/dev/null
 sleep 1.5
@@ -75,6 +81,15 @@ check "view 1 kept (occupied)" "$VIEWS" "1,2"
 ctl run 'view-n 1' >/dev/null
 OUTVIEW=$(ctl state | jq -r '.outputs[0].view')
 check "back on view 1" "$OUTVIEW" 1
+
+# view 2 is destroyed when left empty; view-n 2 must recreate it
+ctl run 'view-n 2' >/dev/null
+ctl run 'view-n 3' >/dev/null
+VIEWS=$(ctl state | jq -r '[.views[].name] | join(",")')
+check "empty view 2 GCd (1 kept, occupied)" "$VIEWS" "1,3"
+ctl run 'view-n 2' >/dev/null
+check "view-n 2 after middle view GC" "$(ctl state | jq -r '.outputs[0].view')" 2
+ctl run 'view-n 1' >/dev/null
 
 # --- tags ---------------------------------------------------------
 ctl run 'tag +web' >/dev/null

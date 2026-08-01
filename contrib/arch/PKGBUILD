@@ -11,7 +11,7 @@
 
 pkgname=wimy-git
 _pkg=wimy
-pkgver=r14.gdfa9a2c
+pkgver=r16.g33af9c7
 pkgrel=1
 pkgdesc="wmii-style window manager for the river Wayland compositor (0.4+)"
 arch=('x86_64' 'aarch64')
@@ -31,7 +31,12 @@ conflicts=('wimy')
 options=('!debug')  # debugedit chokes on Go's DWARF; a debug split is useless here
 
 _src_root="$(realpath "$PWD/../..")"
-source=("${_pkg}::git+file://${_src_root}")
+# Build the branch the checkout lives on, not the repo's default
+# branch: without a #branch fragment makepkg checks out the default
+# branch (main), which silently packages stale code when development
+# happens on another branch.
+_src_branch="$(git -C "$_src_root" branch --show-current)"
+source=("${_pkg}::git+file://${_src_root}${_src_branch:+#branch=${_src_branch}}")
 sha256sums=('SKIP')
 
 pkgver() {

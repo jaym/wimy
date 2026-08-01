@@ -97,11 +97,12 @@ type Config struct {
 // classic feel).
 func Default() *Config {
 	c := &Config{
-		Mod:        "Mod4",
-		ModMask:    Mod4,
-		Terminal:   "alacritty",
-		Launcher:   "fuzzel",
-		Menu:       "fuzzel --dmenu",
+		Mod:      "Mod4",
+		ModMask:  Mod4,
+		Terminal: "alacritty",
+		// dmenu-style: a bar anchored to the top screen edge
+		Launcher:   "fuzzel --anchor top --width 120 --lines 10 --border-radius 0",
+		Menu:       "fuzzel --dmenu --anchor top --width 120 --lines 10 --border-radius 0",
 		StackStrip: 28,
 		Actions: map[string]string{
 			"quit": "wimyctl quit",

@@ -151,6 +151,22 @@ be running (e.g. black screen, no bindings): a missing
 `river_window_manager_v1` global means the compositor is river-classic
 (0.3.x), not river 0.4+.
 
+## Launcher look (dmenu-style fuzzel)
+
+The default `launcher`/`menu` commands make fuzzel render as a bar
+anchored to the top screen edge instead of a centered popup:
+
+```kdl
+launcher "fuzzel --anchor top --width 120 --lines 10 --border-radius 0"
+menu "fuzzel --dmenu --anchor top --width 120 --lines 10 --border-radius 0"
+```
+
+`--width` is in characters (fuzzel has no percentage); ~chars =
+screen pixels / 9, raise it to fill wide screens. Colors and font live
+in fuzzel's own config — [`contrib/fuzzel/fuzzel.ini`](contrib/fuzzel/fuzzel.ini)
+matches the waybar theme; copy it to `~/.config/fuzzel/fuzzel.ini`.
+Tag/action prompts get labeled input (`go to tag: `, `action: `).
+
 ## Waybar
 
 Waybar's built-in `river/*` modules **do not work** with river 0.4 —

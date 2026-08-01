@@ -13,9 +13,14 @@ mod "Mod4"
 // Programs. `launcher` is the program launcher (Mod-p). `menu` is
 // used for tag/action prompts; it must read choices on stdin and
 // print the selection on stdout, dmenu-style.
+//
+// The defaults make fuzzel look like dmenu: a bar anchored to the top
+// screen edge. --width is in CHARACTERS (fuzzel has no percentage);
+// raise it to fill wide screens (~chars = pixels / 9). Colors and font
+// live in fuzzel's own config (see contrib/fuzzel/fuzzel.ini).
 terminal "alacritty"
-launcher "fuzzel"
-menu "fuzzel --dmenu"
+launcher "fuzzel --anchor top --width 120 --lines 10 --border-radius 0"
+menu "fuzzel --dmenu --anchor top --width 120 --lines 10 --border-radius 0"
 
 // Focus borders drawn by the compositor.
 border width=2 focused="#8aadf4" normal="#363a4f"

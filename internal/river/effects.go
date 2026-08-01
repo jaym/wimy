@@ -44,6 +44,18 @@ func (b *Backend) Prompt(kind command.PromptKind, choices []string) error {
 	if len(argv) == 0 {
 		return fmt.Errorf("no menu program configured")
 	}
+	var label string
+	switch kind {
+	case command.PromptView:
+		label = "go to tag: "
+	case command.PromptMoveTo:
+		label = "move to tag: "
+	case command.PromptAction:
+		label = "action: "
+	}
+	if label != "" {
+		argv = append(argv, "-p", label)
+	}
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Stdin = bytes.NewBufferString(strings.Join(choices, "\n") + "\n")
 	var out bytes.Buffer

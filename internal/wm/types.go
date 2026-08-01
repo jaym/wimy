@@ -83,6 +83,11 @@ type Window struct {
 	// FloatRect is the geometry used while the window is floating, in
 	// global compositor coordinates.
 	FloatRect Rect
+	// CSDOnly marks clients that can only draw their own decorations
+	// (Firefox and friends never implement xdg-decoration). They keep
+	// their titlebar, so the layout must not reserve a strip for a
+	// wimy titlebar that is never drawn.
+	CSDOnly bool
 }
 
 // HasTag reports whether the window is tagged with name.

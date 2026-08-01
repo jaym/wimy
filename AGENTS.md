@@ -108,13 +108,28 @@ go generate ./internal/proto
   the intersection) — stack-mode strips use content-clip to 1px.
 - Clients default to CSD: send `use_ssd` to suppress; clients that
   only support CSD report it via `decoration_hint` (they keep CSD and
-  get no wimy titlebar). River only configures the client when its
-  ssd state CHANGES: a client that creates its xdg-decoration object
-  (or explicitly requests client_side) after SSD was already
-  configured is never told server_side (river/XdgDecoration.zig
-  handleRequestMode only records the hint). Workaround in place: on
-  any decoration_hint after use_ssd, toggle use_csd → use_ssd over two
-  manage sequences (second forced with ManageDirty).
+  get no wimy titlebar). `decoration_hint` = `only_supports_csd` (0) is
+  river's *default* for a window with no xdg-decoration object at all —
+  it does not mean the client answered. **Firefox and Zen never bind
+  `zxdg_decoration_manager_v1`** (verified with WAYLAND_DEBUG: zero
+  `get_toplevel_decoration` calls, even with
+  `browser.tabs.inTitlebar=0`), so they are permanently CSD-only and
+  `use_csd` is the correct answer for them.
+- A CSD-only window must get **no titlebar and no space reserved for
+  one**: the model carries `Window.CSDOnly` so the solver skips
+  `insetBar` and clears `Placement.Bar` (sway does the same with
+  `border csd`). Reserving the strip without painting it leaves an
+  unpainted `TitlebarHeight - BorderWidth` gap that shows through as a
+  black block above the window.
+- river DOES send the decoration mode with every configure it emits
+  (`XdgToplevel.configure()` calls `wlr_decoration.setMode()`
+  unconditionally), so a client creating its decoration object late is
+  told the mode by the next configure — no re-assert needed. The one
+  real gap is a client that requests `client_side` while river's ssd
+  state is already `true`: `needsConfigure()` sees no change, so no
+  configure is sent and the `set_mode` request goes unanswered. That is
+  a river-side bug; do not try to paper over it from the WM by toggling
+  `use_csd` → `use_ssd` (it forces a real CSD frame).
 - `exit_session` ends the WHOLE session (what `wimyctl quit` does);
   signals/`finished` must shut wimy down WITHOUT it (river stays,
   WM-less) — protocol intent.
@@ -154,6 +169,13 @@ go generate ./internal/proto
 - Not bound yet: river-input-management, river-libinput-config,
   river-xkb-config (input device configuration hooks).
 - Multi-seat currently shares one focus.
+- No e2e coverage for CSD-only rendering: every Wayland client packaged
+  here (foot, vkcube) negotiates xdg-decoration, and the only CSD-only
+  clients on hand are browsers. The solver side is unit-tested
+  (`TestCSDOnlyWindowGetsNoTitlebarSpace`,
+  `TestCSDOnlyStripInStackMode`); the backend wiring was verified by
+  hand against Firefox and Zen. A minimal CSD-only test client would
+  need xdg-shell bindings, which `internal/proto` does not generate.
 - Tiled windows can't be moved between columns by mouse (keyboard only).
 
 ## Style

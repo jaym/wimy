@@ -416,6 +416,9 @@ func (b *Backend) syncModel() {
 		if w.Title != "" {
 			b.state.SetTitle(w.ID, w.Title)
 		}
+		// river reports decoration_hint before the manage sequence, so
+		// a CSD-only client is known before its first layout.
+		b.state.SetCSDOnly(w.ID, w.CSDOnly)
 	}
 	kept := b.windows[:0]
 	for _, w := range b.windows {
@@ -507,25 +510,13 @@ func (b *Backend) applyManage() {
 
 	// fullscreen requests
 	for _, w := range b.windows {
-		switch {
-		case !w.DecoSent:
+		if !w.DecoSent {
 			w.DecoSent = true
 			if w.CSDOnly {
 				w.Object.UseCsd()
 			} else {
 				w.Object.UseSsd()
 			}
-		case w.DecoRefresh && w.DecoToggle:
-			// phase 2 of the re-assert: back to SSD
-			w.Object.UseSsd()
-			w.DecoRefresh = false
-			w.DecoToggle = false
-		case w.DecoRefresh:
-			// phase 1: force the state to change (see DecoRefresh)
-			w.Object.UseCsd()
-			w.DecoToggle = true
-			// phase 2 must run in a follow-up manage sequence
-			b.wmg.ManageDirty()
 		}
 		if w.FullscreenReq {
 			w.FullscreenReq = false
@@ -610,13 +601,13 @@ func (b *Backend) applyRender() {
 			}
 			w.Node.SetPosition(p.Rect.X, p.Rect.Y)
 			if p.Collapsed {
-				if b.state.TitlebarHeight > 0 && !w.CSDOnly {
+				if p.Bar {
 					// only the titlebar is visible
 					w.Object.SetContentClipBox(0, 0, max32(p.Rect.W, 1), 1)
 					w.ContentClipped = true
 				} else {
-					// no titlebars: clip content to a strip
-					w.Object.SetClipBox(0, 0, max32(p.Rect.W, 1), max32(b.cfg.StackStrip, 1))
+					// no titlebar: clip content to the strip itself
+					w.Object.SetClipBox(0, 0, max32(p.Rect.W, 1), max32(p.Strip, 1))
 					w.Clipped = true
 				}
 			} else {
@@ -630,8 +621,7 @@ func (b *Backend) applyRender() {
 				}
 			}
 			w.Node.PlaceTop()
-			hasBar := b.state.TitlebarHeight > 0 && p.Bar && !w.CSDOnly
-			b.setBorder(w, p.Focused && !b.layerFocus, hasBar)
+			b.setBorder(w, p.Focused && !b.layerFocus, p.Bar)
 			b.renderTitlebar(w, p)
 		}
 	}

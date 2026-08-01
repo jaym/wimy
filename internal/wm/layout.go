@@ -6,9 +6,10 @@ package wm
 // whether it should be hidden entirely.
 type Placement struct {
 	ID        WindowID
-	Rect      Rect // content box, global coordinates; W,H are the proposed dimensions
-	Bar       bool // draw a titlebar above the content (at Rect.Y - bar height)
-	Collapsed bool // stack-mode strip: only the titlebar is visible
+	Rect      Rect  // content box, global coordinates; W,H are the proposed dimensions
+	Bar       bool  // draw a titlebar above the content (at Rect.Y - bar height)
+	Collapsed bool  // stack-mode strip: only the titlebar is visible
+	Strip     int32 // height of a collapsed strip; 0 when not collapsed
 	Hidden    bool
 	Layer     Layer
 	Focused   bool
@@ -91,8 +92,8 @@ func (s *State) layoutOutput(o *Output, placed map[WindowID]bool) []Placement {
 		}
 		out = append(out, Placement{
 			ID:      id,
-			Rect:    s.insetBar(win.FloatRect),
-			Bar:     s.TitlebarHeight > 0,
+			Rect:    s.insetBar(id, win.FloatRect),
+			Bar:     s.hasBar(id),
 			Layer:   LayerFloating,
 			Focused: id == s.Focused,
 			Output:  o.Name,
@@ -101,10 +102,22 @@ func (s *State) layoutOutput(o *Output, placed map[WindowID]bool) []Placement {
 	return out
 }
 
-// insetBar shifts a content box down past the titlebar.
-func (s *State) insetBar(r Rect) Rect {
+// hasBar reports whether the window gets a wimy titlebar: titlebars
+// must be enabled and the client must not be drawing its own.
+func (s *State) hasBar(id WindowID) bool {
+	if s.TitlebarHeight <= 0 {
+		return false
+	}
+	w := s.Windows[id]
+	return w == nil || !w.CSDOnly
+}
+
+// insetBar shifts a content box down past the window's titlebar.
+// Windows without one (titlebars disabled, or a CSD-only client) keep
+// the whole box: reserving a strip nothing paints leaves a black gap.
+func (s *State) insetBar(id WindowID, r Rect) Rect {
 	bar := s.TitlebarHeight
-	if bar <= 0 {
+	if bar <= 0 || !s.hasBar(id) {
 		return r
 	}
 	h := r.H - bar
@@ -151,12 +164,16 @@ func (s *State) layoutColumn(v *View, c *Column, box Rect, outName string, place
 	focused := v.focusedWindow()
 	bar := s.TitlebarHeight
 	var out []Placement
-	put := func(id WindowID, r Rect, collapsed, hidden bool) {
+	// put takes the window's full box; the titlebar inset is applied
+	// per window, since CSD-only clients get no titlebar. strip is the
+	// visible height of a collapsed stack-mode strip.
+	put := func(id WindowID, r Rect, collapsed, hidden bool, strip int32) {
 		out = append(out, Placement{
 			ID:        id,
-			Rect:      r,
-			Bar:       bar > 0 && !hidden,
+			Rect:      s.insetBar(id, r),
+			Bar:       !hidden && s.hasBar(id),
 			Collapsed: collapsed,
+			Strip:     strip,
 			Hidden:    hidden,
 			Layer:     LayerTiled,
 			Focused:   id == s.Focused,
@@ -178,7 +195,7 @@ func (s *State) layoutColumn(v *View, c *Column, box Rect, outName string, place
 			if i == len(ids)-1 {
 				ih = box.Y + box.H - y // remainder
 			}
-			put(id, s.insetBar(Rect{X: box.X, Y: y, W: box.W, H: ih}), false, false)
+			put(id, Rect{X: box.X, Y: y, W: box.W, H: ih}, false, false, 0)
 			y += ih
 		}
 
@@ -208,19 +225,19 @@ func (s *State) layoutColumn(v *View, c *Column, box Rect, outName string, place
 		// windows above the focused one: strips at the top
 		for i := 0; i < fi; i++ {
 			stripY := box.Y + int32(i)*strip
-			put(ids[i], Rect{X: box.X, Y: stripY + bar, W: box.W, H: focusH - bar}, true, false)
+			put(ids[i], Rect{X: box.X, Y: stripY, W: box.W, H: focusH}, true, false, strip)
 		}
 		focusY := box.Y + int32(fi)*strip
-		put(ids[fi], s.insetBar(Rect{X: box.X, Y: focusY, W: box.W, H: focusH}), false, false)
+		put(ids[fi], Rect{X: box.X, Y: focusY, W: box.W, H: focusH}, false, false, 0)
 		// windows below: strips at the bottom
 		for i := fi + 1; i < len(ids); i++ {
 			stripY := focusY + focusH + int32(i-fi-1)*strip
-			put(ids[i], Rect{X: box.X, Y: stripY + bar, W: box.W, H: focusH - bar}, true, false)
+			put(ids[i], Rect{X: box.X, Y: stripY, W: box.W, H: focusH}, true, false, strip)
 		}
 
 	case ModeMax:
 		for _, id := range ids {
-			put(id, s.insetBar(box), false, id != focused)
+			put(id, box, false, id != focused, 0)
 		}
 	}
 	return out

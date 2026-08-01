@@ -159,6 +159,49 @@ func TestTitlebarInsetsContent(t *testing.T) {
 	}
 }
 
+func TestCSDOnlyWindowGetsNoTitlebarSpace(t *testing.T) {
+	s := newTestState(t)
+	s.AddWindow(2, false)
+	s.TitlebarHeight = 22
+	s.SetCSDOnly(1, true)
+	p := placements(s)
+	// window 1 draws its own decorations: it keeps its whole box, and
+	// no titlebar strip is reserved above it (an unpainted strip shows
+	// through as a black block).
+	if p[1].Rect != (Rect{0, 0, 1280, 360}) {
+		t.Errorf("csd-only window 1 should not be inset: %v", p[1].Rect)
+	}
+	if p[1].Bar {
+		t.Errorf("csd-only window 1 should have no titlebar")
+	}
+	// window 2 still gets the wimy titlebar
+	if p[2].Rect != (Rect{0, 360 + 22, 1280, 360 - 22}) || !p[2].Bar {
+		t.Errorf("ssd window 2 should keep its titlebar: %+v", p[2])
+	}
+}
+
+func TestCSDOnlyStripInStackMode(t *testing.T) {
+	s := newTestState(t)
+	s.AddWindow(2, false)
+	s.TitlebarHeight = 22
+	s.SetCSDOnly(1, true)
+	s.SetMode(ModeStack) // focused: 2; window 1 collapses to a strip
+	p := placements(s)
+	// the collapsed strip of a csd-only window shows the top of its own
+	// content, so it starts at the strip origin rather than below a
+	// titlebar that is never drawn.
+	if !p[1].Collapsed || p[1].Rect.Y != 0 {
+		t.Errorf("csd-only strip should start at the strip origin: %+v", p[1])
+	}
+	if p[1].Strip != 22 {
+		t.Errorf("strip height should be reported for clipping, got %d", p[1].Strip)
+	}
+	// the expanded window keeps its titlebar and its inset content
+	if p[2].Rect.Y != 22+22 || !p[2].Bar {
+		t.Errorf("expanded ssd window wrong: %+v", p[2])
+	}
+}
+
 func TestMaxMode(t *testing.T) {
 	s := newTestState(t)
 	s.AddWindow(2, false)

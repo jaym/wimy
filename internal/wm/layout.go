@@ -43,14 +43,15 @@ func (s *State) layoutOutput(o *Output, placed map[WindowID]bool) []Placement {
 	if v == nil || o.Rect.W <= 0 || o.Rect.H <= 0 {
 		return nil
 	}
+	area := o.tilingArea()
 	var out []Placement
 
 	// --- tiled columns ---
-	widths := columnWidths(v.Columns, o.Rect.W)
-	x := o.Rect.X
+	widths := columnWidths(v.Columns, area.W)
+	x := area.X
 	for ci, c := range v.Columns {
 		w := widths[ci]
-		box := Rect{X: x, Y: o.Rect.Y, W: w, H: o.Rect.H}
+		box := Rect{X: x, Y: area.Y, W: w, H: area.H}
 		out = append(out, s.layoutColumn(v, c, box, placed)...)
 		x += w
 	}

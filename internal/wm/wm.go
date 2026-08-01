@@ -85,6 +85,16 @@ func (s *State) SetOutputGeometry(name string, x, y, w, h int32) {
 	}
 }
 
+// SetOutputUsable updates an output's usable (non-exclusive) area.
+func (s *State) SetOutputUsable(name string, x, y, w, h int32) {
+	for _, o := range s.Outputs {
+		if o.Name == name {
+			o.Usable = Rect{X: x, Y: y, W: w, H: h}
+			return
+		}
+	}
+}
+
 // RenameOutput renames an output (when its real name is learned).
 func (s *State) RenameOutput(old, new string) {
 	for _, o := range s.Outputs {

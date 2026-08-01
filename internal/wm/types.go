@@ -161,7 +161,18 @@ func (v *View) empty() bool {
 type Output struct {
 	Name string
 	Rect Rect // X,Y = global position; W,H = dimensions
-	View string
+	// Usable is the area available for tiling after subtracting layer
+	// shell exclusive zones. Zero means "not set": Rect is used.
+	Usable Rect
+	View   string
+}
+
+// tilingArea returns the rectangle the layout solver should use.
+func (o *Output) tilingArea() Rect {
+	if o.Usable.W > 0 && o.Usable.H > 0 {
+		return o.Usable
+	}
+	return o.Rect
 }
 
 // State is the complete window-management state.
@@ -413,13 +424,14 @@ func (v *View) focusWindow(id WindowID) {
 }
 
 // defaultFloatRect returns a centered rectangle covering half the
-// output in each dimension.
+// output's usable area in each dimension.
 func defaultFloatRect(out *Output) Rect {
 	if out == nil || out.Rect.W == 0 {
 		return Rect{W: 640, H: 480}
 	}
-	w, h := out.Rect.W/2, out.Rect.H/2
-	return Rect{X: out.Rect.X + (out.Rect.W-w)/2, Y: out.Rect.Y + (out.Rect.H-h)/2, W: w, H: h}
+	a := out.tilingArea()
+	w, h := a.W/2, a.H/2
+	return Rect{X: a.X + (a.W-w)/2, Y: a.Y + (a.H-h)/2, W: w, H: h}
 }
 
 // fmtString is a small helper for debugging.

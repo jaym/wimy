@@ -13,13 +13,17 @@ import (
 type Output struct {
 	proto.RiverOutputV1Stub
 
-	Object  proto.RiverOutputV1
-	Backend *Backend
+	Object      proto.RiverOutputV1
+	LayerOutput proto.RiverLayerShellOutputV1
+	Backend     *Backend
 
 	WlName uint32 // global name of the corresponding wl_output
 	Name   string // from the corresponding wl_output
 	X, Y   int32
 	W, H   int32
+	// UsableX/Y/W/H is the non-exclusive area (after layer shell
+	// exclusive zones). Zero until the first event arrives.
+	UsableX, UsableY, UsableW, UsableH int32
 
 	NameInModel string // name currently used in the model
 	Added       bool   // registered in the model
@@ -33,6 +37,12 @@ func (o *Output) HandleRiverOutputV1WlOutput(ctx context.Context, name uint32) {
 	o.Backend.resolveOutputNames()
 }
 
+// HandleRiverLayerShellOutputV1NonExclusiveArea records the area left
+// for tiling after layer shell exclusive zones.
+func (o *Output) HandleRiverLayerShellOutputV1NonExclusiveArea(ctx context.Context, x int32, y int32, width int32, height int32) {
+	o.UsableX, o.UsableY, o.UsableW, o.UsableH = x, y, width, height
+}
+
 func (o *Output) HandleRiverOutputV1Position(ctx context.Context, x int32, y int32) {
 	o.X, o.Y = x, y
 }
@@ -44,6 +54,9 @@ func (o *Output) HandleRiverOutputV1Dimensions(ctx context.Context, width int32,
 func (o *Output) MaybeDestroy() bool {
 	if !o.Removed {
 		return false
+	}
+	if o.LayerOutput.IsSet() {
+		o.LayerOutput.Destroy()
 	}
 	o.Object.Destroy()
 	return true
@@ -120,7 +133,9 @@ func (w *Window) HandleRiverWindowV1ExitFullscreenRequested(ctx context.Context)
 type Seat struct {
 	proto.RiverSeatV1Stub
 
-	Object proto.RiverSeatV1
+	Object    proto.RiverSeatV1
+	LayerSeat proto.RiverLayerShellSeatV1
+	Backend   *Backend
 
 	New     bool
 	Removed bool
@@ -129,6 +144,25 @@ type Seat struct {
 }
 
 func (s *Seat) HandleRiverSeatV1Removed(ctx context.Context) { s.Removed = true }
+
+// HandleRiverLayerShellSeatV1FocusExclusive marks that a layer shell
+// surface (e.g. a launcher) takes exclusive keyboard focus.
+func (s *Seat) HandleRiverLayerShellSeatV1FocusExclusive(ctx context.Context) {
+	s.Backend.layerFocus = true
+}
+
+// HandleRiverLayerShellSeatV1FocusNonExclusive marks that a layer
+// shell surface takes non-exclusive keyboard focus.
+func (s *Seat) HandleRiverLayerShellSeatV1FocusNonExclusive(ctx context.Context) {
+	s.Backend.layerFocus = true
+}
+
+// HandleRiverLayerShellSeatV1FocusNone marks that no layer shell
+// surface has keyboard focus anymore; focus returns to the focused
+// window in the following manage sequence.
+func (s *Seat) HandleRiverLayerShellSeatV1FocusNone(ctx context.Context) {
+	s.Backend.layerFocus = false
+}
 
 func (s *Seat) HandleRiverSeatV1WindowInteraction(ctx context.Context, window proto.RiverWindowV1) {
 	if w, ok := window.UserData().(*Window); ok {
@@ -142,6 +176,9 @@ func (s *Seat) MaybeDestroy(bindings []*XkbBinding) bool {
 	}
 	for _, b := range bindings {
 		b.Object.Destroy()
+	}
+	if s.LayerSeat.IsSet() {
+		s.LayerSeat.Destroy()
 	}
 	s.Object.Destroy()
 	return true

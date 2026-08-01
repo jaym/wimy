@@ -33,6 +33,7 @@ type Backend struct {
 	registry proto.WlRegistry
 	wmg      proto.RiverWindowManagerV1
 	xkb      proto.RiverXkbBindingsV1
+	layer    proto.RiverLayerShellV1
 
 	outputs  []*Output
 	windows  []*Window
@@ -52,6 +53,11 @@ type Backend struct {
 	notify func()
 
 	lastFocus wm.WindowID
+
+	// layerFocus is true while a layer shell surface (launcher etc.)
+	// holds keyboard focus.
+	layerFocus        bool
+	lastDefaultOutput string
 }
 
 // New creates a backend. notify is called (from the dispatch
@@ -149,6 +155,9 @@ func (b *Backend) Run(ctx context.Context) (err error) {
 	if !b.xkb.IsSet() {
 		return fmt.Errorf("river_xkb_bindings_v1 global not available")
 	}
+	if !b.layer.IsSet() {
+		return fmt.Errorf("river_layer_shell_v1 global not available (river too old?)")
+	}
 	b.wmg.SetUserData(b)
 
 	b.runAutostart()
@@ -184,6 +193,8 @@ func (b *Backend) HandleWlRegistryGlobal(ctx context.Context, name uint32, iface
 		}
 	case proto.RiverXkbBindingsV1Name:
 		b.xkb = proto.As[proto.RiverXkbBindingsV1](b.registry.Bind(name, iface, 1))
+	case proto.RiverLayerShellV1Name:
+		b.layer = proto.As[proto.RiverLayerShellV1](b.registry.Bind(name, iface, 1))
 	case proto.WlOutputName:
 		bindWlOutput(b, name, version)
 	}
@@ -233,6 +244,10 @@ func (b *Backend) HandleRiverWindowManagerV1Finished(ctx context.Context) {
 func (b *Backend) HandleRiverWindowManagerV1Output(ctx context.Context, id proto.RiverOutputV1) {
 	o := &Output{Object: id, Backend: b}
 	id.SetUserData(o)
+	if b.layer.IsSet() {
+		o.LayerOutput = b.layer.GetOutput(id)
+		o.LayerOutput.SetUserData(o)
+	}
 	b.outputs = append(b.outputs, o)
 }
 
@@ -243,8 +258,12 @@ func (b *Backend) HandleRiverWindowManagerV1Window(ctx context.Context, id proto
 }
 
 func (b *Backend) HandleRiverWindowManagerV1Seat(ctx context.Context, id proto.RiverSeatV1) {
-	s := &Seat{Object: id, New: true}
+	s := &Seat{Object: id, New: true, Backend: b}
 	id.SetUserData(s)
+	if b.layer.IsSet() {
+		s.LayerSeat = b.layer.GetSeat(id)
+		s.LayerSeat.SetUserData(s)
+	}
 	b.seats = append(b.seats, s)
 	for _, bind := range b.cfg.Binds {
 		obj := b.xkb.GetXkbBinding(id, bind.Keysym, bind.Mods)
@@ -304,6 +323,9 @@ func (b *Backend) syncModel() {
 			o.NameInModel = name
 		}
 		b.state.SetOutputGeometry(o.NameInModel, o.X, o.Y, o.W, o.H)
+		if o.UsableW > 0 {
+			b.state.SetOutputUsable(o.NameInModel, o.UsableX, o.UsableY, o.UsableW, o.UsableH)
+		}
 	}
 
 	// windows
@@ -392,14 +414,24 @@ func (b *Backend) applyManage() {
 		}
 	}
 
-	// keyboard focus
+	// keyboard focus: while a layer shell surface holds focus, leave
+	// it alone and dim all window borders
 	focused := b.windowByID(b.state.Focused)
 	for _, s := range b.seats {
+		if b.layerFocus {
+			continue
+		}
 		if focused != nil {
 			s.Object.FocusWindow(focused.Object)
 		} else {
 			s.Object.ClearFocus()
 		}
+	}
+
+	// keep the default layer shell output on the active output
+	if o := b.activeOutput(); o != nil && o.LayerOutput.IsSet() && b.lastDefaultOutput != o.NameInModel {
+		o.LayerOutput.SetDefault()
+		b.lastDefaultOutput = o.NameInModel
 	}
 
 	// dimensions
@@ -456,7 +488,7 @@ func (b *Backend) applyRender() {
 				w.Clipped = false
 			}
 			w.Node.PlaceTop()
-			b.setBorder(w, p.Focused)
+			b.setBorder(w, p.Focused && !b.layerFocus)
 		}
 	}
 }
@@ -502,6 +534,20 @@ func (b *Backend) windowByID(id wm.WindowID) *Window {
 	for _, w := range b.windows {
 		if w.ID == id {
 			return w
+		}
+	}
+	return nil
+}
+
+// activeOutput returns the river output that is active in the model.
+func (b *Backend) activeOutput() *Output {
+	if len(b.state.Outputs) == 0 || b.state.FocusOutput >= len(b.state.Outputs) {
+		return nil
+	}
+	name := b.state.Outputs[b.state.FocusOutput].Name
+	for _, o := range b.outputs {
+		if o.NameInModel == name {
+			return o
 		}
 	}
 	return nil

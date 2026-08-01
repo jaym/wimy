@@ -9463,6 +9463,403 @@ var interfaceRiverXkbBindingsSeatV1 = raw.Interface{
 	UnmarshalEvent: unmarshalEventRiverXkbBindingsSeatV1,
 }
 
+// ../../protocol/river-layer-shell-v1.xml
+
+// SPDX-FileCopyrightText: © 2025 Isaac Freund
+// SPDX-License-Identifier: MIT
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to
+// deal in the Software without restriction, including without limitation the
+// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+// sell copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+// IN THE SOFTWARE.
+
+// This global interface should only be advertised to the client if the
+// river_window_manager_v1 global is also advertised. Binding this interface
+// indicates that the window manager supports layer shell.
+//
+// If the window manager does not bind this interface, the compositor should
+// not allow clients to map layer surfaces. This can be achieved by
+// closing layer surfaces immediately.
+type RiverLayerShellV1 struct {
+	_   raw.Marker[RiverLayerShellV1]
+	raw *raw.Object
+}
+
+// Conn returns the underlying connection.
+func (o RiverLayerShellV1) Conn() *wlcl.Connection { return (*wlcl.Connection)(o.raw.Conn()) }
+
+// IsSet returns true if the object is valid (non-zero).
+func (o RiverLayerShellV1) IsSet() bool { return o.raw != nil }
+
+// Version returns the object's version.
+func (o RiverLayerShellV1) Version() uint32 { return o.raw.Version() }
+
+// UserData returns the object's user data.
+func (o RiverLayerShellV1) UserData() RiverLayerShellV1Data {
+	data, _ := o.raw.UserData().(RiverLayerShellV1Data)
+	return data
+}
+
+// SetUserData sets the object's user data.
+func (o RiverLayerShellV1) SetUserData(v RiverLayerShellV1Data) { o.raw.SetUserData(v) }
+
+// This request indicates that the client will no longer use the
+// river_layer_shell_v1 object.
+func (o RiverLayerShellV1) Destroy() {
+	conn := o.raw.Conn()
+	conn.SendRequest(o.raw, 0, func() (args []byte, fds []int) {
+		o.raw.Destroy()
+		return
+	})
+	return
+}
+
+// It is a protocol error to make this request more than once for a given
+// river_output_v1 object.
+func (o RiverLayerShellV1) GetOutput(output RiverOutputV1) RiverLayerShellOutputV1 {
+	conn := o.raw.Conn()
+	var id *raw.Object
+	conn.SendRequest(o.raw, 1, func() (args []byte, fds []int) {
+		args = make([]byte, 0, 8)
+		id, args = conn.MarshalNewID(args, &interfaceRiverLayerShellOutputV1, o.raw.Version())
+		args = conn.MarshalObject(args, output.raw)
+		return
+	})
+	return As[RiverLayerShellOutputV1](id)
+}
+
+// It is a protocol error to make this request more than once for a given
+// river_seat_v1 object.
+func (o RiverLayerShellV1) GetSeat(seat RiverSeatV1) RiverLayerShellSeatV1 {
+	conn := o.raw.Conn()
+	var id *raw.Object
+	conn.SendRequest(o.raw, 2, func() (args []byte, fds []int) {
+		args = make([]byte, 0, 8)
+		id, args = conn.MarshalNewID(args, &interfaceRiverLayerShellSeatV1, o.raw.Version())
+		args = conn.MarshalObject(args, seat.raw)
+		return
+	})
+	return As[RiverLayerShellSeatV1](id)
+}
+
+type RiverLayerShellV1Data interface {
+}
+
+type RiverLayerShellV1Stub struct{}
+
+func unmarshalEventRiverLayerShellV1(o *raw.Object, op uint16, args []byte, fds []int) (raw.HandleEventFunc, error) {
+	switch op {
+	default:
+		return nil, fmt.Errorf("river_layer_shell_v1: invalid event opcode %d", op)
+	}
+}
+
+const RiverLayerShellV1Name = "river_layer_shell_v1"
+
+var interfaceRiverLayerShellV1 = raw.Interface{
+	Name:           "river_layer_shell_v1",
+	Requests:       []string{"destroy", "get_output", "get_seat"},
+	Events:         []string{},
+	EventsFDs:      []int{},
+	UnmarshalEvent: unmarshalEventRiverLayerShellV1,
+}
+
+const (
+	RiverLayerShellV1ErrorObjectAlreadyCreated = 0
+)
+
+// The lifetime of this object is tied to the corresponding river_output_v1.
+// This object is made inert when the river_output_v1.removed event is sent
+// and should be destroyed.
+type RiverLayerShellOutputV1 struct {
+	_   raw.Marker[RiverLayerShellOutputV1]
+	raw *raw.Object
+}
+
+// Conn returns the underlying connection.
+func (o RiverLayerShellOutputV1) Conn() *wlcl.Connection { return (*wlcl.Connection)(o.raw.Conn()) }
+
+// IsSet returns true if the object is valid (non-zero).
+func (o RiverLayerShellOutputV1) IsSet() bool { return o.raw != nil }
+
+// Version returns the object's version.
+func (o RiverLayerShellOutputV1) Version() uint32 { return o.raw.Version() }
+
+// UserData returns the object's user data.
+func (o RiverLayerShellOutputV1) UserData() RiverLayerShellOutputV1Data {
+	data, _ := o.raw.UserData().(RiverLayerShellOutputV1Data)
+	return data
+}
+
+// SetUserData sets the object's user data.
+func (o RiverLayerShellOutputV1) SetUserData(v RiverLayerShellOutputV1Data) { o.raw.SetUserData(v) }
+
+// This request indicates that the client will no longer use the
+// river_layer_shell_output_v1 object and that it may be safely destroyed.
+//
+// This request should be made after the river_output_v1.removed event is
+// received to complete destruction of the output.
+func (o RiverLayerShellOutputV1) Destroy() {
+	conn := o.raw.Conn()
+	conn.SendRequest(o.raw, 0, func() (args []byte, fds []int) {
+		o.raw.Destroy()
+		return
+	})
+	return
+}
+
+// Mark this output as the default for new layer surfaces which do not
+// request a specific output themselves. This request overrides any
+// previous set_default request on any river_layer_shell_output_v1 object.
+//
+// If no set_default request is made or if the default output is destroyed,
+// the default output is undefined until the next set_default request.
+//
+// This request modifies window management state and may only be made as
+// part of a manage sequence, see the river_window_manager_v1 description.
+func (o RiverLayerShellOutputV1) SetDefault() {
+	conn := o.raw.Conn()
+	conn.SendRequest(o.raw, 1, func() (args []byte, fds []int) {
+		return
+	})
+	return
+}
+
+type RiverLayerShellOutputV1Data interface {
+	// This event indicates the area of the output remaining after subtracting
+	// the exclusive zones of layer surfaces. Exclusive zones are a hint, the
+	// window manager is free to ignore this area hint if it wishes.
+	//
+	// The x and y values are in the global coordinate space, not relative to
+	// the position of the output.
+	//
+	// This event will be followed by a manage_start event after all other new
+	// state has been sent by the server.
+	HandleRiverLayerShellOutputV1NonExclusiveArea(ctx context.Context, x int32, y int32, width int32, height int32)
+}
+
+type RiverLayerShellOutputV1Stub struct{}
+
+func (RiverLayerShellOutputV1Stub) HandleRiverLayerShellOutputV1NonExclusiveArea(ctx context.Context, x int32, y int32, width int32, height int32) {
+}
+
+func unmarshalEventRiverLayerShellOutputV1(o *raw.Object, op uint16, args []byte, fds []int) (raw.HandleEventFunc, error) {
+	switch op {
+	case 0:
+		var (
+			x      int32
+			y      int32
+			width  int32
+			height int32
+			err    error
+		)
+
+		conn := o.Conn()
+		if x, args, err = conn.UnmarshalInt(args); err != nil {
+			return nil, err
+		}
+		if y, args, err = conn.UnmarshalInt(args); err != nil {
+			return nil, err
+		}
+		if width, args, err = conn.UnmarshalInt(args); err != nil {
+			return nil, err
+		}
+		if height, args, err = conn.UnmarshalInt(args); err != nil {
+			return nil, err
+		}
+		if err = conn.UnmarshalEnd(args); err != nil {
+			return nil, err
+		}
+
+		return func(ctx context.Context) {
+			if userData := o.UserData(); userData != nil {
+				userData.(RiverLayerShellOutputV1Data).HandleRiverLayerShellOutputV1NonExclusiveArea(ctx,
+					x, y, width, height,
+				)
+			} else {
+			}
+		}, nil
+	default:
+		return nil, fmt.Errorf("river_layer_shell_output_v1: invalid event opcode %d", op)
+	}
+}
+
+const RiverLayerShellOutputV1Name = "river_layer_shell_output_v1"
+
+var interfaceRiverLayerShellOutputV1 = raw.Interface{
+	Name:           "river_layer_shell_output_v1",
+	Requests:       []string{"destroy", "set_default"},
+	Events:         []string{"non_exclusive_area"},
+	EventsFDs:      []int{0},
+	UnmarshalEvent: unmarshalEventRiverLayerShellOutputV1,
+}
+
+// The lifetime of this object is tied to the corresponding river_seat_v1.
+// This object is made inert when the river_seat_v1.removed event is sent and
+// should be destroyed.
+type RiverLayerShellSeatV1 struct {
+	_   raw.Marker[RiverLayerShellSeatV1]
+	raw *raw.Object
+}
+
+// Conn returns the underlying connection.
+func (o RiverLayerShellSeatV1) Conn() *wlcl.Connection { return (*wlcl.Connection)(o.raw.Conn()) }
+
+// IsSet returns true if the object is valid (non-zero).
+func (o RiverLayerShellSeatV1) IsSet() bool { return o.raw != nil }
+
+// Version returns the object's version.
+func (o RiverLayerShellSeatV1) Version() uint32 { return o.raw.Version() }
+
+// UserData returns the object's user data.
+func (o RiverLayerShellSeatV1) UserData() RiverLayerShellSeatV1Data {
+	data, _ := o.raw.UserData().(RiverLayerShellSeatV1Data)
+	return data
+}
+
+// SetUserData sets the object's user data.
+func (o RiverLayerShellSeatV1) SetUserData(v RiverLayerShellSeatV1Data) { o.raw.SetUserData(v) }
+
+// This request indicates that the client will no longer use the
+// river_layer_shell_seat_v1 object and that it may be safely destroyed.
+//
+// This request should be made after the river_seat_v1.removed event is
+// received to complete destruction of the seat.
+func (o RiverLayerShellSeatV1) Destroy() {
+	conn := o.raw.Conn()
+	conn.SendRequest(o.raw, 0, func() (args []byte, fds []int) {
+		o.raw.Destroy()
+		return
+	})
+	return
+}
+
+type RiverLayerShellSeatV1Data interface {
+	// A layer shell surface will be given exclusive keyboard focus at the end
+	// of the manage sequence in which this event is sent. The window manager
+	// may want to update window decorations or similar to indicate that no
+	// window is focused.
+	//
+	// Until the focus_non_exclusive or focus_none event is sent, all window
+	// manager requests to change focus are ignored.
+	//
+	// This event will be followed by a manage_start event after all other new
+	// state has been sent by the server.
+	HandleRiverLayerShellSeatV1FocusExclusive(ctx context.Context)
+
+	// A layer shell surface will be given non-exclusive keyboard focus at the
+	// end of the manage sequence in which this event is sent. The window
+	// manager may want to update window decorations or similar to indicate
+	// that no window is focused.
+	//
+	// The window manager continues to control focus and may choose to focus a
+	// different window/shell surface at any time. If the window manager sets
+	// focus during the same manage sequence in which this event is sent, the
+	// layer surface will not be focused.
+	//
+	// If the layer surface with non-exclusive focus is closed or the window
+	// manager chooses to move focus away from the layer surface, a focus_none
+	// event will be sent in the next manage sequence.
+	//
+	// This event will be followed by a manage_start event after all other new
+	// state has been sent by the server.
+	HandleRiverLayerShellSeatV1FocusNonExclusive(ctx context.Context)
+
+	// No layer shell surface will have keyboard focus at the end of the manage
+	// sequence in which this event is sent. The window manager may want to
+	// return focus to whichever window last had focus, for example.
+	//
+	// This event will be followed by a manage_start event after all other new
+	// state has been sent by the server.
+	HandleRiverLayerShellSeatV1FocusNone(ctx context.Context)
+}
+
+type RiverLayerShellSeatV1Stub struct{}
+
+func (RiverLayerShellSeatV1Stub) HandleRiverLayerShellSeatV1FocusExclusive(ctx context.Context) {}
+
+func (RiverLayerShellSeatV1Stub) HandleRiverLayerShellSeatV1FocusNonExclusive(ctx context.Context) {}
+
+func (RiverLayerShellSeatV1Stub) HandleRiverLayerShellSeatV1FocusNone(ctx context.Context) {}
+
+func unmarshalEventRiverLayerShellSeatV1(o *raw.Object, op uint16, args []byte, fds []int) (raw.HandleEventFunc, error) {
+	switch op {
+	case 0:
+		var (
+			err error
+		)
+
+		conn := o.Conn()
+		if err = conn.UnmarshalEnd(args); err != nil {
+			return nil, err
+		}
+
+		return func(ctx context.Context) {
+			if userData := o.UserData(); userData != nil {
+				userData.(RiverLayerShellSeatV1Data).HandleRiverLayerShellSeatV1FocusExclusive(ctx)
+			} else {
+			}
+		}, nil
+	case 1:
+		var (
+			err error
+		)
+
+		conn := o.Conn()
+		if err = conn.UnmarshalEnd(args); err != nil {
+			return nil, err
+		}
+
+		return func(ctx context.Context) {
+			if userData := o.UserData(); userData != nil {
+				userData.(RiverLayerShellSeatV1Data).HandleRiverLayerShellSeatV1FocusNonExclusive(ctx)
+			} else {
+			}
+		}, nil
+	case 2:
+		var (
+			err error
+		)
+
+		conn := o.Conn()
+		if err = conn.UnmarshalEnd(args); err != nil {
+			return nil, err
+		}
+
+		return func(ctx context.Context) {
+			if userData := o.UserData(); userData != nil {
+				userData.(RiverLayerShellSeatV1Data).HandleRiverLayerShellSeatV1FocusNone(ctx)
+			} else {
+			}
+		}, nil
+	default:
+		return nil, fmt.Errorf("river_layer_shell_seat_v1: invalid event opcode %d", op)
+	}
+}
+
+const RiverLayerShellSeatV1Name = "river_layer_shell_seat_v1"
+
+var interfaceRiverLayerShellSeatV1 = raw.Interface{
+	Name:           "river_layer_shell_seat_v1",
+	Requests:       []string{"destroy"},
+	Events:         []string{"focus_exclusive", "focus_non_exclusive", "focus_none"},
+	EventsFDs:      []int{0, 0, 0},
+	UnmarshalEvent: unmarshalEventRiverLayerShellSeatV1,
+}
+
 // ../../protocol/wlr-virtual-keyboard-unstable-v1.xml
 
 // Copyright © 2008-2011  Kristian Høgsberg
@@ -9749,6 +10146,12 @@ func Interfaces(name string) *raw.Interface {
 		return &interfaceRiverXkbBindingV1
 	case "river_xkb_bindings_seat_v1":
 		return &interfaceRiverXkbBindingsSeatV1
+	case "river_layer_shell_v1":
+		return &interfaceRiverLayerShellV1
+	case "river_layer_shell_output_v1":
+		return &interfaceRiverLayerShellOutputV1
+	case "river_layer_shell_seat_v1":
+		return &interfaceRiverLayerShellSeatV1
 	case "zwp_virtual_keyboard_v1":
 		return &interfaceZwpVirtualKeyboardV1
 	case "zwp_virtual_keyboard_manager_v1":

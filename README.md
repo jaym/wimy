@@ -20,6 +20,9 @@ wimy — a separate client process speaking the stable
   elsewhere swaps the outputs' views.
 - **JSON-RPC 2.0 control socket** (replacing wmii's 9P interface) with a
   `wimyctl` CLI — drive the WM from scripts, bars and key bindings.
+- **Layer shell support**: launchers, bars and wallpapers (fuzzel,
+  waybar, …) work; bars with exclusive zones reserve space, launchers
+  with exclusive keyboard focus dim window borders until dismissed.
 - **KDL configuration** with comments; external bar and launcher.
 - No cgo: pure Go via [wlcl](https://codeberg.org/vyivel/wlcl).
 
@@ -154,8 +157,6 @@ be running (e.g. black screen, no bindings): a missing
   yet (planned; the protocol supports it).
 - Fullscreen is only honored when a client requests it; there is no
   key binding to toggle it.
-- wimy tiles over the full output area; bars using layer-shell
-  exclusive zones are not yet reserved space for.
 - Multiple seats share a single focus.
 
 ## Development
@@ -165,6 +166,7 @@ go test ./...           # unit tests (model, config)
 ./e2e.sh                # end-to-end: headless river + wimy via wimyctl
 ./e2e-multi.sh          # end-to-end with two headless outputs
 ./e2e-keys.sh           # end-to-end keybindings via virtual keyboard
+./e2e-layer.sh          # end-to-end layer shell (fuzzel)
 ```
 
 The e2e scripts use foot for client windows because it renders via

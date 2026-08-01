@@ -119,14 +119,6 @@ func (s *State) SetTitle(id WindowID, title string) {
 	}
 }
 
-// SetCSDOnly marks a window as drawing its own decorations, which
-// suppresses its wimy titlebar and the space reserved for it.
-func (s *State) SetCSDOnly(id WindowID, csd bool) {
-	if w := s.Windows[id]; w != nil {
-		w.CSDOnly = csd
-	}
-}
-
 // --- windows ---
 
 // AddWindow registers a new window. If tags is empty, the window

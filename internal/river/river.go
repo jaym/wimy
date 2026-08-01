@@ -416,9 +416,6 @@ func (b *Backend) syncModel() {
 		if w.Title != "" {
 			b.state.SetTitle(w.ID, w.Title)
 		}
-		// river reports decoration_hint before the manage sequence, so
-		// a CSD-only client is known before its first layout.
-		b.state.SetCSDOnly(w.ID, w.CSDOnly)
 	}
 	kept := b.windows[:0]
 	for _, w := range b.windows {
@@ -510,13 +507,16 @@ func (b *Backend) applyManage() {
 
 	// fullscreen requests
 	for _, w := range b.windows {
+		// Every window gets a wimy titlebar, and use_ssd suppresses the
+		// client's own where the client supports xdg-decoration. Clients
+		// that never create a decoration object (Firefox, Zen, GTK) keep
+		// drawing theirs — nothing can stop them — and end up with both,
+		// exactly as under sway. Suppressing our titlebar for them
+		// instead would leave them with no wimy title text and no strip
+		// to click in stack mode.
 		if !w.DecoSent {
 			w.DecoSent = true
-			if w.CSDOnly {
-				w.Object.UseCsd()
-			} else {
-				w.Object.UseSsd()
-			}
+			w.Object.UseSsd()
 		}
 		if w.FullscreenReq {
 			w.FullscreenReq = false

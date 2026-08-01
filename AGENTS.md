@@ -114,21 +114,28 @@ go generate ./internal/proto
   render sequence. `set_clip_box` clips content+borders+decorations (0
   disables); `set_content_clip_box` clips content only (borders wrap
   the intersection) — stack-mode strips use content-clip to 1px.
-- Clients default to CSD: send `use_ssd` to suppress; clients that
-  only support CSD report it via `decoration_hint` (they keep CSD and
-  get no wimy titlebar). `decoration_hint` = `only_supports_csd` (0) is
-  river's *default* for a window with no xdg-decoration object at all —
-  it does not mean the client answered. **Firefox and Zen never bind
+- **Every window gets a wimy titlebar, unconditionally**, and every
+  window is sent `use_ssd`. `decoration_hint` is deliberately ignored —
+  do not reintroduce a CSD special case (see below for why it looks
+  tempting and is wrong).
+- `decoration_hint` = `only_supports_csd` (0) is river's *default* for a
+  window that has no xdg-decoration object at all; it does not mean the
+  client answered anything. **Firefox and Zen never bind
   `zxdg_decoration_manager_v1`** (verified with WAYLAND_DEBUG: zero
   `get_toplevel_decoration` calls, even with
-  `browser.tabs.inTitlebar=0`), so they are permanently CSD-only and
-  `use_csd` is the correct answer for them.
-- A CSD-only window must get **no titlebar and no space reserved for
-  one**: the model carries `Window.CSDOnly` so the solver skips
-  `insetBar` and clears `Placement.Bar` (sway does the same with
-  `border csd`). Reserving the strip without painting it leaves an
-  unpainted `TitlebarHeight - BorderWidth` gap that shows through as a
-  black block above the window.
+  `browser.tabs.inTitlebar=0`), so they report hint 0 forever. Nothing
+  can stop such a client drawing its own decorations — `use_ssd` is a
+  no-op for it, since river only calls `setMode()` `if
+  (toplevel.decoration)`.
+- Suppressing our titlebar for those clients (the obvious reading of
+  hint 0) is wrong twice over: `insetBar` still reserves
+  `TitlebarHeight`, so the unreserved strip showed through as a black
+  block; and in stack mode the window collapsed to a strip with no
+  titlebar to click, making it unreachable. **sway decorates them too**
+  — verified by running Firefox under headless sway: `border: normal`,
+  `deco_rect.height: 27`, sway's titlebar drawn above Firefox's tab
+  bar. Double decoration on such clients is the accepted cost (sway
+  pays it); a per-app opt-out belongs in config, not in hint handling.
 - river DOES send the decoration mode with every configure it emits
   (`XdgToplevel.configure()` calls `wlr_decoration.setMode()`
   unconditionally), so a client creating its decoration object late is
@@ -177,13 +184,10 @@ go generate ./internal/proto
 - Not bound yet: river-input-management, river-libinput-config,
   river-xkb-config (input device configuration hooks).
 - Multi-seat currently shares one focus.
-- No e2e coverage for CSD-only rendering: every Wayland client packaged
-  here (foot, vkcube) negotiates xdg-decoration, and the only CSD-only
-  clients on hand are browsers. The solver side is unit-tested
-  (`TestCSDOnlyWindowGetsNoTitlebarSpace`,
-  `TestCSDOnlyStripInStackMode`); the backend wiring was verified by
-  hand against Firefox and Zen. A minimal CSD-only test client would
-  need xdg-shell bindings, which `internal/proto` does not generate.
+- No per-app way to turn a titlebar off. Clients that draw their own
+  CSD (Firefox, Zen, GTK apps) get both theirs and wimy's, same as
+  under sway. If that becomes annoying, add a config rule keyed on
+  app_id rather than resurrecting `decoration_hint` handling.
 - Tiled windows can't be moved between columns by mouse (keyboard only).
 
 ## Style

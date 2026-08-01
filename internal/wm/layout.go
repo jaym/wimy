@@ -92,8 +92,8 @@ func (s *State) layoutOutput(o *Output, placed map[WindowID]bool) []Placement {
 		}
 		out = append(out, Placement{
 			ID:      id,
-			Rect:    s.insetBar(id, win.FloatRect),
-			Bar:     s.hasBar(id),
+			Rect:    s.insetBar(win.FloatRect),
+			Bar:     s.hasBar(),
 			Layer:   LayerFloating,
 			Focused: id == s.Focused,
 			Output:  o.Name,
@@ -102,22 +102,16 @@ func (s *State) layoutOutput(o *Output, placed map[WindowID]bool) []Placement {
 	return out
 }
 
-// hasBar reports whether the window gets a wimy titlebar: titlebars
-// must be enabled and the client must not be drawing its own.
-func (s *State) hasBar(id WindowID) bool {
-	if s.TitlebarHeight <= 0 {
-		return false
-	}
-	w := s.Windows[id]
-	return w == nil || !w.CSDOnly
-}
+// hasBar reports whether windows get a wimy titlebar. Every window
+// does when titlebars are enabled, including clients that also draw
+// their own CSD: the strip a titlebar reserves must always be painted,
+// or it shows through as a black block.
+func (s *State) hasBar() bool { return s.TitlebarHeight > 0 }
 
 // insetBar shifts a content box down past the window's titlebar.
-// Windows without one (titlebars disabled, or a CSD-only client) keep
-// the whole box: reserving a strip nothing paints leaves a black gap.
-func (s *State) insetBar(id WindowID, r Rect) Rect {
+func (s *State) insetBar(r Rect) Rect {
 	bar := s.TitlebarHeight
-	if bar <= 0 || !s.hasBar(id) {
+	if bar <= 0 {
 		return r
 	}
 	h := r.H - bar
@@ -173,8 +167,8 @@ func (s *State) layoutColumn(c *Column, box Rect, outName string, placed map[Win
 	put := func(id WindowID, r Rect, collapsed, hidden bool, strip int32) {
 		out = append(out, Placement{
 			ID:        id,
-			Rect:      s.insetBar(id, r),
-			Bar:       !hidden && s.hasBar(id),
+			Rect:      s.insetBar(r),
+			Bar:       !hidden && s.hasBar(),
 			Collapsed: collapsed,
 			Strip:     strip,
 			Hidden:    hidden,

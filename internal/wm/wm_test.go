@@ -220,46 +220,28 @@ func TestTitlebarInsetsContent(t *testing.T) {
 	}
 }
 
-func TestCSDOnlyWindowGetsNoTitlebarSpace(t *testing.T) {
-	s := newTestState(t)
-	s.AddWindow(2, false)
-	s.TitlebarHeight = 22
-	s.SetCSDOnly(1, true)
-	p := placements(s)
-	// window 1 draws its own decorations: it keeps its whole box, and
-	// no titlebar strip is reserved above it (an unpainted strip shows
-	// through as a black block).
-	if p[1].Rect != (Rect{0, 0, 1280, 360}) {
-		t.Errorf("csd-only window 1 should not be inset: %v", p[1].Rect)
-	}
-	if p[1].Bar {
-		t.Errorf("csd-only window 1 should have no titlebar")
-	}
-	// window 2 still gets the wimy titlebar
-	if p[2].Rect != (Rect{0, 360 + 22, 1280, 360 - 22}) || !p[2].Bar {
-		t.Errorf("ssd window 2 should keep its titlebar: %+v", p[2])
-	}
-}
-
-func TestCSDOnlyStripInStackMode(t *testing.T) {
-	s := newTestState(t)
-	s.AddWindow(2, false)
-	s.TitlebarHeight = 22
-	s.SetCSDOnly(1, true)
-	s.SetMode(ModeStack) // focused: 2; window 1 collapses to a strip
-	p := placements(s)
-	// the collapsed strip of a csd-only window shows the top of its own
-	// content, so it starts at the strip origin rather than below a
-	// titlebar that is never drawn.
-	if !p[1].Collapsed || p[1].Rect.Y != 0 {
-		t.Errorf("csd-only strip should start at the strip origin: %+v", p[1])
-	}
-	if p[1].Strip != 22 {
-		t.Errorf("strip height should be reported for clipping, got %d", p[1].Strip)
-	}
-	// the expanded window keeps its titlebar and its inset content
-	if p[2].Rect.Y != 22+22 || !p[2].Bar {
-		t.Errorf("expanded ssd window wrong: %+v", p[2])
+// TestEveryReservedStripIsPainted guards the black-block bug: insetBar
+// reserves TitlebarHeight above every window, so every visible window
+// must also report Bar — a reserved strip that nobody paints shows
+// through as a black block. This must hold in every column mode,
+// including for clients that draw their own CSD (which the model does
+// not distinguish, on purpose: sway decorates them too).
+func TestEveryReservedStripIsPainted(t *testing.T) {
+	for _, mode := range []Mode{ModeDefault, ModeStack, ModeMax} {
+		s := newTestState(t)
+		s.AddWindow(2, false)
+		s.AddWindow(3, false)
+		s.AddWindow(4, true) // floating
+		s.TitlebarHeight = 22
+		s.SetMode(mode)
+		for _, p := range s.Layout() {
+			if p.Hidden {
+				continue
+			}
+			if !p.Bar {
+				t.Errorf("%v: window %d is inset but has no titlebar: %+v", mode, p.ID, p)
+			}
+		}
 	}
 }
 

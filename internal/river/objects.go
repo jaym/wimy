@@ -89,11 +89,7 @@ type Window struct {
 	BarSent        bool // last titlebar border state applied
 	BorderSet      bool // a border was applied at least once
 
-	// CSDOnly is true for clients that only support client-side
-	// decorations (decoration_hint); they keep their own titlebar
-	// and get no wimy titlebar.
-	CSDOnly  bool
-	DecoSent bool // use_ssd/use_csd was sent
+	DecoSent bool // use_ssd was sent
 
 	// Titlebar decoration
 	Deco        proto.RiverDecorationV1
@@ -143,15 +139,6 @@ func (w *Window) HandleRiverWindowV1Title(ctx context.Context, title wlcl.NullSt
 
 func (w *Window) HandleRiverWindowV1Parent(ctx context.Context, parent proto.RiverWindowV1) {
 	w.Parent = parent.IsSet()
-}
-
-// HandleRiverWindowV1DecorationHint notes clients that can only do CSD.
-func (w *Window) HandleRiverWindowV1DecorationHint(ctx context.Context, hint uint32) {
-	only := hint == proto.RiverWindowV1DecorationHintOnlySupportsCsd
-	if only != w.CSDOnly {
-		w.CSDOnly = only
-		w.DecoSent = false // renegotiate at the next manage sequence
-	}
 }
 
 func (w *Window) HandleRiverWindowV1FullscreenRequested(ctx context.Context, output proto.RiverOutputV1) {

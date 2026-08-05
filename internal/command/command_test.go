@@ -13,6 +13,7 @@ type fakeFx struct {
 	acted         string
 	killed        wm.WindowID
 	quit          bool
+	reloaded      bool
 }
 
 func (f *fakeFx) Spawn(argv []string) error { return nil }
@@ -22,6 +23,7 @@ func (f *fakeFx) Action(name string) error  { f.acted = name; return nil }
 func (f *fakeFx) Actions() []string         { return f.actions }
 func (f *fakeFx) Kill(id wm.WindowID)       { f.killed = id }
 func (f *fakeFx) Quit()                     { f.quit = true }
+func (f *fakeFx) Reload() error             { f.reloaded = true; return nil }
 func (f *fakeFx) Prompt(kind PromptKind, choices []string) error {
 	f.promptKind = kind
 	f.promptChoices = choices
@@ -66,6 +68,17 @@ func TestUnknownCommand(t *testing.T) {
 	r := New(env)
 	if err := r.Run("frobnicate"); err == nil {
 		t.Fatal("unknown command should error")
+	}
+}
+
+func TestReload(t *testing.T) {
+	env, fx := newTestEnv()
+	r := New(env)
+	if err := r.Run("reload"); err != nil {
+		t.Fatal(err)
+	}
+	if !fx.reloaded {
+		t.Fatal("reload should call Fx.Reload")
 	}
 }
 

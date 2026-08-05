@@ -3,7 +3,6 @@ package river
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"os/exec"
 	"strings"
 
@@ -118,11 +117,10 @@ func (b *Backend) Kill(id wm.WindowID) {
 	}
 }
 
-// runAutostart executes the configured autostart commands.
+// runAutostart executes the configured autostart commands, tracking
+// each process so a later config reload can reconcile them.
 func (b *Backend) runAutostart() {
 	for _, cmdline := range b.cfg.Autostart {
-		if err := b.Spawn([]string{"sh", "-c", cmdline}); err != nil {
-			log.Printf("autostart %q: %v", cmdline, err)
-		}
+		b.spawnAutostart(cmdline)
 	}
 }

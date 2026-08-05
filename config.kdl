@@ -109,8 +109,19 @@ bind "Mod-Shift-0" { moveto-n 0; }
 // Named shell commands run with Mod-a. Add your own here.
 action "quit" { run "wimyctl quit"; }
 
+// Reload the configuration without restarting wimy (Mod-a → reload,
+// or bind a key directly). Applies key bindings, colors, programs,
+// and reconciles autostart: added entries are started, removed ones
+// killed, changed ones re-executed, crashed ones restarted.
+// action "reload" { run "wimyctl run reload"; }
+// bind "Mod-Shift-r" { reload; }
+
 // --- autostart --------------------------------------------------------
-// Programs started with the window manager. Examples:
+// Programs started with the window manager. On `reload`, entries are
+// reconciled: added → started, removed → killed (SIGTERM, SIGKILL
+// after 2s), changed → killed and re-executed, crashed → restarted.
+// Unchanged entries keep running.
+// Examples:
 //   waybar with the wimy modules from contrib/waybar/
 //   kanshi for display resolution/scale (see contrib/kanshi/config)
 // autostart {

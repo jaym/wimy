@@ -31,6 +31,10 @@ type Backend struct {
 	state *wm.State
 	reg   *command.Registry
 
+	// configArg is the -config flag value as passed at startup;
+	// reload re-runs config.Load with it.
+	configArg string
+
 	conn     *wlcl.Connection
 	registry proto.WlRegistry
 	wmg      proto.RiverWindowManagerV1
@@ -45,6 +49,11 @@ type Backend struct {
 	seats           []*Seat
 	bindings        []*XkbBinding
 	pointerBindings []*PointerBinding
+	autostart       map[string][]*autostartProc
+
+	// bindsNeedEnable asks applyManage to (re)enable all seats'
+	// bindings after a config reload recreated them.
+	bindsNeedEnable bool
 
 	wlOutputNames  map[uint32]string
 	wlOutputScales map[uint32]int32
@@ -71,12 +80,14 @@ type Backend struct {
 	lastDefaultOutput string
 }
 
-// New creates a backend. notify is called (from the dispatch
-// goroutine) after every manage sequence in which state may have
-// changed; it must not block.
-func New(cfg *config.Config, notify func()) *Backend {
+// New creates a backend. configArg is the config file path argument
+// (as for config.Load) used by the reload command. notify is called
+// (from the dispatch goroutine) after every manage sequence in which
+// state may have changed; it must not block.
+func New(cfg *config.Config, configArg string, notify func()) *Backend {
 	b := &Backend{
 		cfg:            cfg,
+		configArg:      configArg,
 		state:          wm.NewState(),
 		wlOutputNames:  make(map[uint32]string),
 		wlOutputScales: make(map[uint32]int32),
@@ -85,14 +96,7 @@ func New(cfg *config.Config, notify func()) *Backend {
 	}
 	b.state.StackStrip = cfg.StackStrip
 	b.state.TitlebarHeight = cfg.Titlebar.Height
-	b.tbr = titlebar.New(cfg.Titlebar.Height, titlebar.Colors{
-		FocusedBg:     toRGBA(cfg.Titlebar.FocusedBg),
-		FocusedFg:     toRGBA(cfg.Titlebar.FocusedFg),
-		NormalBg:      toRGBA(cfg.Titlebar.NormalBg),
-		NormalFg:      toRGBA(cfg.Titlebar.NormalFg),
-		BorderFocused: toRGBA(cfg.Border.Focused),
-		BorderNormal:  toRGBA(cfg.Border.Normal),
-	}, cfg.Border.Width)
+	b.tbr = newTitlebarRenderer(cfg)
 	b.reg = command.New(&command.Env{State: b.state, Fx: b})
 	return b
 }
@@ -324,8 +328,15 @@ func (b *Backend) HandleRiverWindowManagerV1Seat(ctx context.Context, id proto.R
 		s.LayerSeat.SetUserData(s)
 	}
 	b.seats = append(b.seats, s)
+	b.createXkbBindings(s)
+	b.createPointerBindings(s)
+}
+
+// createXkbBindings declares the configured key bindings for a seat.
+// They take effect when enabled during a manage sequence.
+func (b *Backend) createXkbBindings(s *Seat) {
 	for _, bind := range b.cfg.Binds {
-		obj := b.xkb.GetXkbBinding(id, bind.Keysym, bind.Mods)
+		obj := b.xkb.GetXkbBinding(s.Object, bind.Keysym, bind.Mods)
 		xb := &XkbBinding{
 			Object:  obj,
 			Seat:    s,
@@ -339,9 +350,14 @@ func (b *Backend) HandleRiverWindowManagerV1Seat(ctx context.Context, id proto.R
 		obj.SetUserData(xb)
 		b.bindings = append(b.bindings, xb)
 	}
-	// pointer bindings: Mod+drag move/resize
+}
+
+// createPointerBindings declares the Mod+drag move/resize pointer
+// bindings for a seat. They take effect when enabled during a manage
+// sequence.
+func (b *Backend) createPointerBindings(s *Seat) {
 	for _, button := range []uint32{btnLeft, btnRight} {
-		obj := id.GetPointerBinding(button, b.cfg.ModMask)
+		obj := s.Object.GetPointerBinding(button, b.cfg.ModMask)
 		pb := &PointerBinding{
 			Object: obj,
 			Seat:   s,
@@ -476,9 +492,12 @@ func (b *Backend) drainQueue() {
 // applyManage proposes window-management state: focus, dimensions,
 // tiled edges, fullscreen transitions.
 func (b *Backend) applyManage() {
-	// enable bindings of new seats
+	// enable bindings: for newly announced seats, and for all seats
+	// after a config reload recreated them
+	enableAll := b.bindsNeedEnable
+	b.bindsNeedEnable = false
 	for _, s := range b.seats {
-		if s.New {
+		if s.New || enableAll {
 			s.New = false
 			for _, xb := range b.bindings {
 				if xb.Seat == s {

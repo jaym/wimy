@@ -49,6 +49,9 @@ type Effects interface {
 	Kill(id wm.WindowID)
 	// Quit exits the window manager.
 	Quit()
+	// Reload re-reads the configuration file and applies changes
+	// (key bindings, colors, programs, autostart).
+	Reload() error
 }
 
 // Env is the context command handlers run in.
@@ -90,6 +93,7 @@ func New(env *Env) *Registry {
 		"spawn-terminal":     func(e *Env, _ []string) error { return e.Fx.SpawnTerminal() },
 		"spawn-menu":         func(e *Env, _ []string) error { return e.Fx.SpawnMenu() },
 		"action":             cmdAction,
+		"reload":             func(e *Env, _ []string) error { return e.Fx.Reload() },
 		"quit":               func(e *Env, _ []string) error { e.Fx.Quit(); return nil },
 	}
 	return r

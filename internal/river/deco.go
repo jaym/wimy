@@ -87,12 +87,20 @@ func (b *Backend) renderTitlebar(w *Window, p wm.Placement) {
 	w.DecoSurface.Commit()
 }
 
-// destroyDeco releases titlebar protocol objects.
+// destroyDeco releases titlebar protocol objects and resets the
+// cached render state, so a titlebar can later be recreated cleanly
+// (a config reload turning titlebars back on).
 func (w *Window) destroyDeco() {
 	if w.Deco.IsSet() {
 		w.Deco.Destroy()
+		w.Deco = proto.RiverDecorationV1{}
 	}
 	if w.DecoSurface.IsSet() {
 		w.DecoSurface.Destroy()
+		w.DecoSurface = proto.WlSurface{}
 	}
+	w.DecoTitle = ""
+	w.DecoFocused = false
+	w.DecoWidth = -1
+	w.DecoScale = 0
 }

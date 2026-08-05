@@ -180,6 +180,12 @@ go generate ./internal/proto
 - Defaults live in `config.Default()`; a user config that declares no
   `bind` keeps default bindings (declaring any replaces all); actions
   merge over defaults. Keep this semantics when extending.
+- The config is hot-reloadable via the `reload` command (`wimyctl run
+  reload`): bindings are re-declared to the compositor, live-read
+  values swap, and autostart processes are reconciled (added → spawn,
+  removed → SIGTERM/grace/SIGKILL, changed → re-exec, crashed →
+  restart). `Backend.applyConfig` (internal/river/reload.go) is the
+  single apply path — extend it when adding config sections.
 - Key combos name the PHYSICAL key (see gotchas above).
 
 ## Testing philosophy

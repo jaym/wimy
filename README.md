@@ -160,7 +160,7 @@ wimyctl subscribe | jq -r '.params.views | map(select(.output != "")) | .[].name
 `view [tag]`, `view-next`, `view-prev`, `view-n <n>`,
 `moveto [tag]`, `moveto-n <n>`, `tag <[+-]name...>`,
 `kill`, `spawn <cmd...>`, `spawn-terminal`, `spawn-menu`,
-`action [name]`, `quit`.
+`action [name]`, `reload`, `quit`.
 
 ## Configuration
 
@@ -179,6 +179,42 @@ Binding notes (inherited from river's matching semantics):
   or CapsLock** is active.
 - A config file that declares no `bind` of its own keeps the default
   bindings; declaring any `bind` replaces them all.
+
+### Reloading
+
+`wimyctl run reload` re-reads the config file and applies changes
+live — bind it to a key or put it in the action menu:
+
+```kdl
+bind "Mod-Shift-r" { reload; }
+action "reload" { run "wimyctl run reload"; }
+```
+
+Everything applies without a restart: key bindings and the primary
+modifier (re-declared to the compositor), border/titlebar colors and
+sizes, `terminal`/`launcher`/`menu`, `focus-follows-mouse`, actions,
+and `stack-strip`. The log lists what changed on each reload.
+
+Autostart programs are tracked (each in its own process group) and
+reconciled:
+
+- **added** entry → started
+- **removed** entry → killed (SIGTERM to the process group; SIGKILL
+  after 2 s if ignored)
+- **changed** entry → killed and re-executed
+- **unchanged** entry → keeps running — even if the program's *own*
+  config changed (restart it by editing the entry or spawning it
+  manually)
+- an entry whose process **died** on its own is restarted on reload
+
+Not reloadable / caveats (surfaced in the log):
+
+- A config that fails to parse is rejected wholesale: the old config
+  stays active, the error is logged and shown via zenity/notify-send
+  when available.
+- An already-open launcher/menu prompt keeps the old flags.
+- `-config`/`-log` and the socket path are command-line flags, not
+  config — changing them needs a wimy restart.
 
 ## Troubleshooting
 

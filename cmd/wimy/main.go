@@ -40,7 +40,7 @@ func main() {
 	}
 
 	var server *rpc.Server
-	backend := river.New(cfg, func() {
+	backend := river.New(cfg, *configPath, func() {
 		if server != nil {
 			server.Notify()
 		}

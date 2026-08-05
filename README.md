@@ -213,7 +213,7 @@ colored when focused. Clients are told to use server-side decorations
 insist on CSD (some GTK apps) keep theirs and get no wimy titlebar.
 
 - Stack mode collapsed strips are the titlebars themselves.
-- `titlebar off` in config.kdl gives dwm-style border-only
+- `titlebar "off"` in config.kdl gives dwm-style border-only
   decorations; `titlebar height=N` and the four colors are
   configurable (see config.kdl).
 - Borders are compositor-drawn; with a titlebar the top border is

@@ -78,6 +78,31 @@ autostart {
 	}
 }
 
+// TestTitlebarOff guards the quoted `titlebar "off"` form (bare
+// `off` is not a valid KDL value and must stay an error) and the
+// height=0 equivalent.
+func TestTitlebarOff(t *testing.T) {
+	load := func(text string) (*Config, error) {
+		p := filepath.Join(t.TempDir(), "config.kdl")
+		if err := os.WriteFile(p, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return Load(p)
+	}
+	for _, form := range []string{`titlebar "off"`, "titlebar height=0"} {
+		c, err := load(form + "\n")
+		if err != nil {
+			t.Fatalf("%s: %v", form, err)
+		}
+		if c.Titlebar.Height != 0 {
+			t.Errorf("%s: height %d, want 0", form, c.Titlebar.Height)
+		}
+	}
+	if _, err := load("titlebar off\n"); err == nil {
+		t.Error("bare `titlebar off` should not parse")
+	}
+}
+
 func TestLoadMissingDefaultPathOK(t *testing.T) {
 	c, err := Load(filepath.Join(t.TempDir(), "nonexistent.kdl"))
 	if err == nil {

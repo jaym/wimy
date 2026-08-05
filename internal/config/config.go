@@ -321,7 +321,9 @@ func (c *Config) applyNode(n *document.Node) error {
 		c.StackStrip = int32(v)
 
 	case "titlebar":
-		// `titlebar off` disables titlebars entirely
+		// `titlebar "off"` disables titlebars entirely (so does
+		// height=0). Note: the string must be quoted — bare `off` is
+		// not a valid KDL value.
 		if len(n.Arguments) >= 1 {
 			if s, ok := n.Arguments[0].Value.(string); ok && s == "off" {
 				c.Titlebar.Height = 0

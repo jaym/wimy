@@ -1,6 +1,4 @@
-//go:build linux
-
-package river
+package backend
 
 import (
 	"log"
@@ -16,6 +14,14 @@ import (
 // exit after SIGTERM before SIGKILL follows.
 const autostartGrace = 2 * time.Second
 
+// Autostart supervises the processes started from the config's
+// autostart list so a reload can reconcile them. The zero value is
+// ready to use. Not safe for concurrent use: call it from the
+// backend's dispatch thread.
+type Autostart struct {
+	procs map[string][]*autostartProc
+}
+
 // autostartProc tracks one spawned autostart command. The process
 // runs in its own process group so that shell wrappers which fork
 // (instead of exec) don't leak children when wimy kills the group.
@@ -27,8 +33,15 @@ type autostartProc struct {
 	done    chan struct{} // closed by the reaping goroutine
 }
 
-// spawnAutostart starts one autostart entry and tracks it.
-func (b *Backend) spawnAutostart(cmdline string) {
+// StartAll starts every entry of list.
+func (a *Autostart) StartAll(list []string) {
+	for _, cmdline := range list {
+		a.Start(cmdline)
+	}
+}
+
+// Start starts one autostart entry and tracks it.
+func (a *Autostart) Start(cmdline string) {
 	cmd := exec.Command("sh", "-c", cmdline)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
@@ -46,17 +59,17 @@ func (b *Backend) spawnAutostart(cmdline string) {
 		p.dead.Store(true)
 		close(p.done)
 	}()
-	if b.autostart == nil {
-		b.autostart = make(map[string][]*autostartProc)
+	if a.procs == nil {
+		a.procs = make(map[string][]*autostartProc)
 	}
-	b.autostart[cmdline] = append(b.autostart[cmdline], p)
+	a.procs[cmdline] = append(a.procs[cmdline], p)
 	log.Printf("autostart: started %q (pid %d)", cmdline, cmd.Process.Pid)
 }
 
-// takeAutostart removes and returns one tracked process for cmdline,
+// take removes and returns one tracked process for cmdline,
 // preferring a live one (so its SIGTERM is meaningful).
-func (b *Backend) takeAutostart(cmdline string) *autostartProc {
-	procs := b.autostart[cmdline]
+func (a *Autostart) take(cmdline string) *autostartProc {
+	procs := a.procs[cmdline]
 	if len(procs) == 0 {
 		return nil
 	}
@@ -68,17 +81,17 @@ func (b *Backend) takeAutostart(cmdline string) *autostartProc {
 		}
 	}
 	p := procs[idx]
-	b.autostart[cmdline] = append(procs[:idx], procs[idx+1:]...)
-	if len(b.autostart[cmdline]) == 0 {
-		delete(b.autostart, cmdline)
+	a.procs[cmdline] = append(procs[:idx], procs[idx+1:]...)
+	if len(a.procs[cmdline]) == 0 {
+		delete(a.procs, cmdline)
 	}
 	return p
 }
 
-// terminateAutostart SIGTERMs the process group, escalating to
-// SIGKILL after the grace period. A process that already exited is
-// reported, not an error.
-func (b *Backend) terminateAutostart(p *autostartProc) {
+// terminate SIGTERMs the process group, escalating to SIGKILL after
+// the grace period. A process that already exited is reported, not an
+// error.
+func terminate(p *autostartProc) {
 	if p.dead.Load() {
 		log.Printf("config reload: autostart %q already exited; nothing to kill", p.cmdline)
 		return
@@ -99,27 +112,27 @@ func (b *Backend) terminateAutostart(p *autostartProc) {
 	}()
 }
 
-// syncAutostart reconciles tracked processes with the new config
-// list: removed entries are terminated, added entries spawned,
-// changed entries terminated and re-executed, and unchanged entries
-// keep running. Processes that exited on their own but whose entry is
-// still configured are restarted — users typically edit and reload
+// Sync reconciles tracked processes with the new config list: removed
+// entries are terminated, added entries spawned, changed entries
+// terminated and re-executed, and unchanged entries keep running.
+// Processes that exited on their own but whose entry is still
+// configured are restarted — users typically edit and reload
 // precisely to bring a dead bar back.
-func (b *Backend) syncAutostart(oldList, newList []string) (killed, spawned, restarted int) {
+func (a *Autostart) Sync(oldList, newList []string) (killed, spawned, restarted int) {
 	kill, spawn := config.DiffExecs(oldList, newList)
 	for _, cmdline := range kill {
-		if p := b.takeAutostart(cmdline); p != nil {
-			b.terminateAutostart(p)
+		if p := a.take(cmdline); p != nil {
+			terminate(p)
 			killed++
 		}
 	}
 	for _, cmdline := range spawn {
-		b.spawnAutostart(cmdline)
+		a.Start(cmdline)
 		spawned++
 	}
 	// After the kill/spawn passes the tracked set matches newList
 	// exactly; restart anything tracked that died on its own.
-	for cmdline, procs := range b.autostart {
+	for cmdline, procs := range a.procs {
 		alive := procs[:0]
 		dead := 0
 		for _, p := range procs {
@@ -129,10 +142,10 @@ func (b *Backend) syncAutostart(oldList, newList []string) (killed, spawned, res
 				alive = append(alive, p)
 			}
 		}
-		b.autostart[cmdline] = alive
+		a.procs[cmdline] = alive
 		for i := 0; i < dead; i++ {
 			log.Printf("config reload: autostart %q exited; restarting", cmdline)
-			b.spawnAutostart(cmdline)
+			a.Start(cmdline)
 			restarted++
 		}
 	}

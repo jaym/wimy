@@ -154,7 +154,7 @@ func (b *Backend) applyConfig(newCfg *config.Config) {
 	// autostart: reconcile tracked processes with the new list
 	// (removed → killed, added → spawned, changed → re-executed,
 	// crashed-but-configured → restarted)
-	killed, spawned, restarted := b.syncAutostart(old.Autostart, newCfg.Autostart)
+	killed, spawned, restarted := b.autostart.Sync(old.Autostart, newCfg.Autostart)
 	if !slices.Equal(old.Autostart, newCfg.Autostart) || killed+spawned+restarted > 0 {
 		changes = append(changes, fmt.Sprintf("autostart (%d killed, %d spawned, %d restarted)",
 			killed, spawned, restarted))

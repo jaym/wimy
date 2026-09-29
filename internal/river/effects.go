@@ -119,10 +119,7 @@ func (b *Backend) Kill(id wm.WindowID) {
 	}
 }
 
-// runAutostart executes the configured autostart commands, tracking
-// each process so a later config reload can reconcile them.
+// runAutostart executes the configured autostart commands.
 func (b *Backend) runAutostart() {
-	for _, cmdline := range b.cfg.Autostart {
-		b.spawnAutostart(cmdline)
-	}
+	b.autostart.StartAll(b.cfg.Autostart)
 }

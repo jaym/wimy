@@ -17,6 +17,7 @@ import (
 
 	"hazelnut.eclair.cafe/wlcl"
 
+	"wimy/internal/backend"
 	"wimy/internal/command"
 	"wimy/internal/config"
 	"wimy/internal/proto"
@@ -51,7 +52,7 @@ type Backend struct {
 	seats           []*Seat
 	bindings        []*XkbBinding
 	pointerBindings []*PointerBinding
-	autostart       map[string][]*autostartProc
+	autostart       backend.Autostart
 
 	// bindsNeedEnable asks applyManage to (re)enable all seats'
 	// bindings after a config reload recreated them.

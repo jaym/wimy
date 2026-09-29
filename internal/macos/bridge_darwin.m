@@ -1,7 +1,7 @@
 // AppKit/Accessibility side of the macOS backend. Everything here
-// runs on the main thread: AX observer sources are added to the main
-// run loop, workspace notifications and Carbon hotkey events are
-// delivered there too.
+// runs on the main thread: AX observer sources and the key event tap
+// are added to the main run loop; workspace notifications and Carbon
+// hotkey events are delivered there too.
 #import <AppKit/AppKit.h>
 #include <ApplicationServices/ApplicationServices.h>
 #include <Carbon/Carbon.h>
@@ -32,6 +32,7 @@ static tracked_win *wins;
 static int nwins, capwins;
 static tracked_app *apps;
 static int napps, capapps;
+static CFMachPortRef keytap;
 
 static int find_win(uint32_t wid) {
 	for (int i = 0; i < nwins; i++)
@@ -252,6 +253,40 @@ void wimy_start_tracking(void) {
 	                                              }];
 	for (NSRunningApplication *app in [[NSWorkspace sharedWorkspace] runningApplications])
 		watch_app(app);
+}
+
+static CGEventRef keytap_cb(CGEventTapProxy proxy, CGEventType type, CGEventRef ev, void *ctx) {
+	if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
+		CGEventTapEnable(keytap, true);
+		return ev;
+	}
+	if (type != kCGEventKeyDown) return ev;
+	uint16_t code = (uint16_t)CGEventGetIntegerValueField(ev, kCGKeyboardEventKeycode);
+	int repeat = CGEventGetIntegerValueField(ev, kCGKeyboardEventAutorepeat) != 0;
+	return goKeyDown(code, CGEventGetFlags(ev), repeat) ? NULL : ev;
+}
+
+int wimy_start_keytap(void) {
+	keytap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault,
+	                          CGEventMaskBit(kCGEventKeyDown), keytap_cb, NULL);
+	if (!keytap) return -1;
+	CFRunLoopSourceRef src = CFMachPortCreateRunLoopSource(NULL, keytap, 0);
+	CFRunLoopAddSource(CFRunLoopGetMain(), src, kCFRunLoopCommonModes);
+	CFRelease(src);
+	CGEventTapEnable(keytap, true);
+	return 0;
+}
+
+// wimy_secure_input_pid returns the pid of the process holding secure
+// event input (which blinds the event tap), or 0.
+int wimy_secure_input_pid(void) {
+	CFDictionaryRef d = CGSessionCopyCurrentDictionary();
+	if (!d) return 0;
+	int pid = 0;
+	CFNumberRef n = CFDictionaryGetValue(d, CFSTR("kCGSSessionSecureInputPID"));
+	if (n) CFNumberGetValue(n, kCFNumberIntType, &pid);
+	CFRelease(d);
+	return pid;
 }
 
 static EventHotKeyRef *hotkeys;

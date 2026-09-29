@@ -78,3 +78,70 @@ func TestDefaultBindingsAllMap(t *testing.T) {
 		t.Errorf("default bindings without a macOS hotkey: %v", bad)
 	}
 }
+
+// CGEventFlags bits, as delivered by the event tap.
+const (
+	tShift   = 1 << 17
+	tControl = 1 << 18
+	tOption  = 1 << 19
+	tCommand = 1 << 20
+	tNumpad  = 1 << 21
+	tFn      = 1 << 23
+	tCaps    = 1 << 16
+)
+
+func TestViaTapOnlyWithoutCtrlOrCmd(t *testing.T) {
+	keys, _ := hotkeysFor(binds(t,
+		"Mod-h", "a", "Mod-Shift-h", "b", "Ctrl-Option-h", "c", "Cmd-Option-h", "d", "Ctrl-x", "e",
+	))
+	want := []bool{true, true, false, false, false}
+	for i, k := range keys {
+		if k.viaTap() != want[i] {
+			t.Errorf("%s: viaTap = %v, want %v", k.combo, k.viaTap(), want[i])
+		}
+	}
+}
+
+func TestCarbonModsFromFlagsIgnoresCapsFnNumpad(t *testing.T) {
+	if got := carbonModsFromFlags(tShift | tOption | tCaps | tFn | tNumpad); got != carbonShift|carbonOption {
+		t.Errorf("got %#x, want shift|option", got)
+	}
+	if got := carbonModsFromFlags(tControl | tCommand); got != carbonControl|carbonCmd {
+		t.Errorf("got %#x, want control|cmd", got)
+	}
+}
+
+func TestTapKeysMatchExactly(t *testing.T) {
+	keys, _ := hotkeysFor(binds(t, "Mod-h", "focus left", "Mod-Shift-h", "move left", "Mod-Left", "focus left"))
+	tk := newTapKeys(keys)
+	if id, run, swallow := tk.keyDown(0x04, tOption, false); !run || !swallow || keys[id].cmd != "focus left" {
+		t.Errorf("Option-h: id=%d run=%v swallow=%v", id, run, swallow)
+	}
+	if id, _, _ := tk.keyDown(0x04, tOption|tShift, false); keys[id].cmd != "move left" {
+		t.Errorf("Option-Shift-h matched %q", keys[id].cmd)
+	}
+	if _, run, swallow := tk.keyDown(0x04, tOption|tCommand, false); run || swallow {
+		t.Errorf("Option-Cmd-h matched; modifiers must match exactly")
+	}
+	if _, run, _ := tk.keyDown(0x7B, tOption|tFn|tNumpad, false); !run {
+		t.Errorf("Option-Left with the fn/numpad flags macOS sets on arrows did not match")
+	}
+}
+
+func TestTapKeysRepeatAndPassthrough(t *testing.T) {
+	keys, _ := hotkeysFor(binds(t, "Mod-h", "focus left"))
+	tk := newTapKeys(keys)
+	if _, run, swallow := tk.keyDown(0x04, tOption, true); run || !swallow {
+		t.Errorf("autorepeat: run=%v swallow=%v, want false true", run, swallow)
+	}
+	if _, run, swallow := tk.keyDown(0x0E, tOption, false); run || swallow { // Option-e: accent dead key
+		t.Errorf("unbound Option-e: run=%v swallow=%v, want false false", run, swallow)
+	}
+}
+
+func TestTapKeysSkipCarbonRoutedCombos(t *testing.T) {
+	keys, _ := hotkeysFor(binds(t, "Ctrl-Option-h", "focus left"))
+	if tk := newTapKeys(keys); len(tk) != 0 {
+		t.Errorf("tap handles %d combos that Carbon delivers", len(tk))
+	}
+}

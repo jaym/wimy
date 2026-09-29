@@ -45,7 +45,9 @@ var keycodes = map[uint32]uint16{
 	0xffc6: 0x65, 0xffc7: 0x6D, 0xffc8: 0x67, 0xffc9: 0x6F, // F9-F12
 }
 
-// hotkey is one key binding as registered with RegisterEventHotKey.
+// hotkey is one key binding. Combos with Control or Command are
+// registered as Carbon hotkeys; the rest go through the event tap (see
+// viaTap).
 type hotkey struct {
 	combo string // as written in the config, for messages
 	code  uint16 // kVK_* virtual key code
@@ -77,10 +79,6 @@ func carbonMods(mods uint32) (uint32, bool) {
 // equivalent are returned by combo so they can be reported. A combo
 // bound twice keeps the later command, in the earlier position: a
 // hotkey can only be registered once.
-//
-// Carbon hotkeys (rather than a CGEventTap) keep working while another
-// app holds secure input (Terminal's Secure Keyboard Entry, password
-// fields), fire once per press, and need no permission.
 func hotkeysFor(binds []config.Bind) (keys []hotkey, unsupported []string) {
 	index := make(map[[2]uint32]int)
 	for _, b := range binds {
@@ -100,4 +98,68 @@ func hotkeysFor(binds []config.Bind) (keys []hotkey, unsupported []string) {
 		keys = append(keys, k)
 	}
 	return keys, unsupported
+}
+
+// viaTap reports whether the event tap must deliver this binding
+// instead of a Carbon hotkey. On current macOS (15+), RegisterEventHotKey
+// never fires for combos whose only modifiers are Option/Shift (they
+// type characters, so they are withheld as a keylogging measure), and
+// the event tap can see them. But the tap receives nothing while any
+// app holds secure input (Terminal's Secure Keyboard Entry, password
+// fields), which Carbon hotkeys survive. So: Carbon whenever the combo
+// has Control or Command, the tap otherwise.
+func (k hotkey) viaTap() bool { return k.mods&(carbonCmd|carbonControl) == 0 }
+
+// CGEventFlags modifier bits (CGEventTypes.h). Caps Lock (1<<16), the
+// numeric-pad bit (1<<21, set on arrow keys) and Fn (1<<23, set on
+// arrow and F keys) are deliberately not binding modifiers.
+const (
+	flagShift   = 1 << 17
+	flagControl = 1 << 18
+	flagOption  = 1 << 19
+	flagCommand = 1 << 20
+)
+
+// carbonModsFromFlags converts event tap flags to Carbon modifier bits.
+func carbonModsFromFlags(flags uint64) uint32 {
+	var m uint32
+	if flags&flagShift != 0 {
+		m |= carbonShift
+	}
+	if flags&flagControl != 0 {
+		m |= carbonControl
+	}
+	if flags&flagOption != 0 {
+		m |= carbonOption
+	}
+	if flags&flagCommand != 0 {
+		m |= carbonCmd
+	}
+	return m
+}
+
+// tapKeys maps the (key code, Carbon modifiers) of tap-delivered
+// bindings to their index in the hotkey list.
+type tapKeys map[[2]uint32]int
+
+// newTapKeys indexes the bindings the event tap delivers.
+func newTapKeys(keys []hotkey) tapKeys {
+	t := make(tapKeys)
+	for i, k := range keys {
+		if k.viaTap() {
+			t[[2]uint32{uint32(k.code), k.mods}] = i
+		}
+	}
+	return t
+}
+
+// keyDown decides what the event tap does with a key-down: swallow it
+// when it is bound, and run the binding (hotkey index id) only on the
+// initial press, not on autorepeat. Unbound keys pass through.
+func (t tapKeys) keyDown(code uint16, flags uint64, repeat bool) (id int, run, swallow bool) {
+	id, ok := t[[2]uint32{uint32(code), carbonModsFromFlags(flags)}]
+	if !ok {
+		return 0, false, false
+	}
+	return id, !repeat, true
 }

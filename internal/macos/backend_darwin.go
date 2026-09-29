@@ -35,7 +35,10 @@ var current *Backend
 type Backend struct {
 	*backend.Core
 
-	hotkeys   []hotkey // index = Carbon hotkey id
+	hotkeys   []hotkey // all bindings; index = Carbon hotkey id
+	tapKeys   tapKeys  // the bindings the event tap delivers
+	tapOn     bool     // the event tap is installed
+	securePID int      // process holding secure input, 0 if none
 	applied   frames
 	known     map[wm.WindowID]bool
 	output    string // model name of the managed (primary) screen
@@ -58,8 +61,9 @@ func New(cfg *config.Config, configArg string, notify func()) *Backend {
 	return b
 }
 
-// rebind (re)registers the config's key bindings as Carbon hotkeys.
-// Main thread only, after wimy_app_init.
+// rebind (re)registers the config's key bindings: combos with Control
+// or Command as Carbon hotkeys, the rest through the event tap (see
+// hotkey.viaTap). Main thread only, after wimy_app_init.
 func (b *Backend) rebind() {
 	C.wimy_hotkeys_clear()
 	keys, unsupported := hotkeysFor(b.Cfg.Binds)
@@ -67,10 +71,41 @@ func (b *Backend) rebind() {
 		log.Printf("bind %q: no macOS key or modifier for this combo; ignored", combo)
 	}
 	b.hotkeys = keys
+	b.tapKeys = newTapKeys(keys)
 	for id, k := range keys {
+		if k.viaTap() {
+			continue
+		}
 		if st := C.wimy_hotkey_register(C.uint32_t(id), C.uint16_t(k.code), C.uint32_t(k.mods)); st != 0 {
 			log.Printf("bind %q: macOS refused the hotkey (OSStatus %d; another app may own it)", k.combo, int(st))
 		}
+	}
+	if len(b.tapKeys) > 0 && !b.tapOn {
+		if C.wimy_start_keytap() != 0 {
+			log.Printf("could not install the keyboard event tap: bindings without Ctrl or Cmd won't work")
+		} else {
+			b.tapOn = true
+		}
+	}
+}
+
+// checkSecureInput logs when an app starts or stops holding secure
+// input while tap-delivered bindings exist: macOS then withholds all
+// key events from the tap, so those bindings go dead until it ends.
+func (b *Backend) checkSecureInput() {
+	pid := int(C.wimy_secure_input_pid())
+	if pid == b.securePID {
+		return
+	}
+	b.securePID = pid
+	if len(b.tapKeys) == 0 {
+		return
+	}
+	if pid != 0 {
+		log.Printf("secure input is on (pid %d, e.g. Terminal's Secure Keyboard Entry or a password field): "+
+			"bindings without Ctrl or Cmd are blocked until it ends", pid)
+	} else {
+		log.Printf("secure input is off: all bindings work again")
 	}
 }
 
@@ -187,6 +222,7 @@ func (b *Backend) apply() {
 		b.checkFrames(moved)
 	}
 
+	b.checkSecureInput()
 	if f := b.State.Focused; f != 0 && f != b.lastFocus {
 		C.wimy_window_focus(C.uint32_t(f))
 	}
@@ -307,4 +343,18 @@ func goHotKey(id C.uint32_t) {
 		b.Enqueue(b.hotkeys[id].cmd)
 		b.markDirty()
 	}
+}
+
+//export goKeyDown
+func goKeyDown(code C.uint16_t, flags C.uint64_t, repeat C.int) C.int {
+	b := current
+	id, run, swallow := b.tapKeys.keyDown(uint16(code), uint64(flags), repeat != 0)
+	if run {
+		b.Enqueue(b.hotkeys[id].cmd)
+		b.markDirty()
+	}
+	if swallow {
+		return 1
+	}
+	return 0
 }

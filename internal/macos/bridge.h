@@ -21,6 +21,11 @@ void wimy_schedule_apply(void);       // goApply on the next main-queue pass
 void wimy_start_tracking(void);       // workspace + AX observers; reports existing windows
 int wimy_screens(wimy_screen *out, int max);
 
+// Event tap for bindings Carbon can't deliver (Option-only combos):
+// goKeyDown decides whether to swallow each key-down. 0 ok, -1 failed.
+int wimy_start_keytap(void);
+int wimy_secure_input_pid(void); // 0 when no app holds secure input
+
 // Carbon hotkeys: goHotKey(id) is called on each press. Returns 0 or
 // the OSStatus (e.g. eventHotKeyExistsErr when another app owns it).
 int wimy_hotkey_register(uint32_t id, uint16_t code, uint32_t mods);

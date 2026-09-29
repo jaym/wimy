@@ -624,3 +624,70 @@ func TestFloatRectOps(t *testing.T) {
 		t.Fatalf("min clamp: %v", got)
 	}
 }
+
+// columnsOf returns the window IDs of each column of the active view.
+func columnsOf(s *State) [][]WindowID {
+	var out [][]WindowID
+	for _, c := range s.activeView().Columns {
+		out = append(out, append([]WindowID(nil), c.Windows...))
+	}
+	return out
+}
+
+func TestSpreadColumns(t *testing.T) {
+	s := newTestState(t)
+	for id := WindowID(2); id <= 5; id++ {
+		s.AddWindow(id, false)
+	}
+	s.FocusWindow(4)
+
+	s.SpreadColumns(3)
+
+	want := [][]WindowID{{1, 2}, {3, 4}, {5}}
+	if got := columnsOf(s); !reflect.DeepEqual(got, want) {
+		t.Fatalf("columns = %v, want %v", got, want)
+	}
+	for i, c := range s.activeView().Columns {
+		if c.Factor != 1 || c.Mode != ModeDefault {
+			t.Errorf("column %d: factor %v mode %v, want equal default columns", i, c.Factor, c.Mode)
+		}
+	}
+	if s.Focused != 4 || s.activeView().FocusCol != 1 {
+		t.Errorf("focus = %d in column %d, want 4 in column 1", s.Focused, s.activeView().FocusCol)
+	}
+}
+
+func TestSpreadColumnsFewerWindowsThanColumns(t *testing.T) {
+	s := newTestState(t)
+	s.AddWindow(2, false)
+	s.SpreadColumns(3)
+	if got, want := columnsOf(s), [][]WindowID{{1}, {2}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("columns = %v, want %v", got, want)
+	}
+}
+
+func TestSpreadColumnsKeepsFloating(t *testing.T) {
+	s := newTestState(t)
+	s.AddWindow(2, true)
+	s.AddWindow(3, false)
+	s.SpreadColumns(3)
+	v := s.activeView()
+	if got, want := columnsOf(s), [][]WindowID{{1}, {3}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("columns = %v, want %v", got, want)
+	}
+	if !v.FloatContains(2) {
+		t.Errorf("floating window left the floating layer")
+	}
+	if s.Focused != 3 {
+		t.Errorf("focus = %d, want 3 (unchanged)", s.Focused)
+	}
+}
+
+func TestSpreadColumnsOneColumnIsNoop(t *testing.T) {
+	s := newTestState(t)
+	s.AddWindow(2, false)
+	s.SpreadColumns(1)
+	if got, want := columnsOf(s), [][]WindowID{{1, 2}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("columns = %v, want %v", got, want)
+	}
+}

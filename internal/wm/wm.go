@@ -423,6 +423,41 @@ func ResizeColumns(c, n *Column, shift float64) {
 	n.Factor -= shift
 }
 
+// SpreadColumns redistributes the active view's tiled windows, in
+// order, over up to maxCols equal-width columns: window i of n goes to
+// column i*k/n. The floating layer and the focused window are kept.
+// Backends that adopt a desktop full of existing windows (macOS at
+// startup) use it instead of stacking them all in one column.
+func (s *State) SpreadColumns(maxCols int) {
+	v := s.activeView()
+	if v == nil {
+		return
+	}
+	var tiled []WindowID
+	for _, c := range v.Columns {
+		tiled = append(tiled, c.Windows...)
+	}
+	k := min(len(tiled), maxCols)
+	if k <= 1 {
+		return
+	}
+	focused := v.focusedWindow()
+	layer := v.FocusLayer
+	cols := make([]*Column, k)
+	for i := range cols {
+		cols[i] = &Column{Mode: ModeDefault, Factor: 1}
+	}
+	for i, id := range tiled {
+		c := cols[i*k/len(tiled)]
+		c.Windows = append(c.Windows, id)
+	}
+	v.Columns = cols
+	v.FocusCol = 0
+	if layer == LayerTiled {
+		v.focusWindow(focused)
+	}
+}
+
 // --- mouse geometry ---
 
 // ColumnBoundaries returns the x positions of the boundaries between

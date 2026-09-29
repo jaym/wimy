@@ -1,9 +1,10 @@
 // AppKit/Accessibility side of the macOS backend. Everything here
-// runs on the main thread: AX observer sources and the key event tap
-// are added to the main run loop, workspace notifications are
-// delivered on the main queue.
+// runs on the main thread: AX observer sources are added to the main
+// run loop, workspace notifications and Carbon hotkey events are
+// delivered there too.
 #import <AppKit/AppKit.h>
 #include <ApplicationServices/ApplicationServices.h>
+#include <Carbon/Carbon.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -31,7 +32,6 @@ static tracked_win *wins;
 static int nwins, capwins;
 static tracked_app *apps;
 static int napps, capapps;
-static CFMachPortRef keytap;
 
 static int find_win(uint32_t wid) {
 	for (int i = 0; i < nwins; i++)
@@ -254,26 +254,40 @@ void wimy_start_tracking(void) {
 		watch_app(app);
 }
 
-static CGEventRef keytap_cb(CGEventTapProxy proxy, CGEventType type, CGEventRef ev, void *ctx) {
-	if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
-		CGEventTapEnable(keytap, true);
-		return ev;
-	}
-	if (type != kCGEventKeyDown) return ev;
-	uint16_t code = (uint16_t)CGEventGetIntegerValueField(ev, kCGKeyboardEventKeycode);
-	int repeat = CGEventGetIntegerValueField(ev, kCGKeyboardEventAutorepeat) != 0;
-	return goKeyDown(code, CGEventGetFlags(ev), repeat) ? NULL : ev;
+static EventHotKeyRef *hotkeys;
+static int nhotkeys, caphotkeys;
+static int hotkey_handler_installed;
+
+static OSStatus hotkey_handler(EventHandlerCallRef next, EventRef ev, void *ctx) {
+	EventHotKeyID hk;
+	if (GetEventParameter(ev, kEventParamDirectObject, typeEventHotKeyID, NULL, sizeof hk, NULL, &hk) == noErr &&
+	    hk.signature == 'wimy')
+		goHotKey(hk.id);
+	return noErr;
 }
 
-int wimy_start_keytap(void) {
-	keytap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault,
-	                          CGEventMaskBit(kCGEventKeyDown), keytap_cb, NULL);
-	if (!keytap) return -1;
-	CFRunLoopSourceRef src = CFMachPortCreateRunLoopSource(NULL, keytap, 0);
-	CFRunLoopAddSource(CFRunLoopGetMain(), src, kCFRunLoopCommonModes);
-	CFRelease(src);
-	CGEventTapEnable(keytap, true);
+int wimy_hotkey_register(uint32_t id, uint16_t code, uint32_t mods) {
+	if (!hotkey_handler_installed) {
+		EventTypeSpec spec = {kEventClassKeyboard, kEventHotKeyPressed};
+		InstallApplicationEventHandler(NewEventHandlerUPP(hotkey_handler), 1, &spec, NULL, NULL);
+		hotkey_handler_installed = 1;
+	}
+	EventHotKeyRef ref = NULL;
+	EventHotKeyID hk = {'wimy', id};
+	OSStatus st = RegisterEventHotKey(code, mods, hk, GetApplicationEventTarget(), 0, &ref);
+	if (st != noErr) return (int)st;
+	if (nhotkeys == caphotkeys) {
+		caphotkeys = caphotkeys ? caphotkeys * 2 : 64;
+		hotkeys = realloc(hotkeys, caphotkeys * sizeof *hotkeys);
+	}
+	hotkeys[nhotkeys++] = ref;
 	return 0;
+}
+
+void wimy_hotkeys_clear(void) {
+	for (int i = 0; i < nhotkeys; i++)
+		UnregisterEventHotKey(hotkeys[i]);
+	nhotkeys = 0;
 }
 
 int wimy_screens(wimy_screen *out, int max) {

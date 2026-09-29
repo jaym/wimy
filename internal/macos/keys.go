@@ -2,34 +2,14 @@ package macos
 
 import "wimy/internal/config"
 
-// CGEventFlags modifier bits (CGEventTypes.h). Caps Lock (1<<16), the
-// numeric-pad bit (1<<21, set on arrow keys) and Fn (1<<23, set on
-// arrow and F keys) are deliberately not modifiers for bindings.
+// Carbon modifier bits for RegisterEventHotKey (Events.h: cmdKey,
+// shiftKey, optionKey, controlKey).
 const (
-	flagShift   = 1 << 17
-	flagControl = 1 << 18
-	flagOption  = 1 << 19
-	flagCommand = 1 << 20
+	carbonCmd     = 1 << 8
+	carbonShift   = 1 << 9
+	carbonOption  = 1 << 11
+	carbonControl = 1 << 12
 )
-
-// modsFromFlags converts CGEventFlags to config modifier masks:
-// Option is Mod1 (Alt) and Command is Mod4 (Super).
-func modsFromFlags(flags uint64) uint32 {
-	var m uint32
-	if flags&flagShift != 0 {
-		m |= config.ModShift
-	}
-	if flags&flagControl != 0 {
-		m |= config.ModCtrl
-	}
-	if flags&flagOption != 0 {
-		m |= config.Mod1
-	}
-	if flags&flagCommand != 0 {
-		m |= config.Mod4
-	}
-	return m
-}
 
 // keycodes maps the keysyms config.parseKeysym produces to macOS
 // virtual key codes (Carbon kVK_*). The kVK_ANSI_* codes are physical
@@ -65,46 +45,59 @@ var keycodes = map[uint32]uint16{
 	0xffc6: 0x65, 0xffc7: 0x6D, 0xffc8: 0x67, 0xffc9: 0x6F, // F9-F12
 }
 
-// combo is a physical key plus an exact modifier mask.
-type combo struct {
-	code uint16
-	mods uint32
+// hotkey is one key binding as registered with RegisterEventHotKey.
+type hotkey struct {
+	combo string // as written in the config, for messages
+	code  uint16 // kVK_* virtual key code
+	mods  uint32 // Carbon modifier bits
+	cmd   string
 }
 
-// Bindings maps physical key combos to command strings.
-type Bindings map[combo]string
+// carbonMods converts a config modifier mask to Carbon modifier bits:
+// Option is Mod1 (Alt) and Command is Mod4 (Super). Mod3 and Mod5 have
+// no macOS equivalent.
+func carbonMods(mods uint32) (uint32, bool) {
+	var out uint32
+	for _, m := range []struct{ cfg, carbon uint32 }{
+		{config.ModShift, carbonShift},
+		{config.ModCtrl, carbonControl},
+		{config.Mod1, carbonOption},
+		{config.Mod4, carbonCmd},
+	} {
+		if mods&m.cfg != 0 {
+			out |= m.carbon
+			mods &^= m.cfg
+		}
+	}
+	return out, mods == 0
+}
 
-// NewBindings resolves config bindings to macOS key codes. Combos
-// whose key has no macOS key code are returned so they can be
-// reported; they are not bound.
-func NewBindings(binds []config.Bind) (Bindings, []string) {
-	out := make(Bindings, len(binds))
-	var unsupported []string
+// hotkeysFor resolves config bindings to Carbon hotkeys. Bindings
+// whose key has no macOS key code or whose modifiers have no macOS
+// equivalent are returned by combo so they can be reported. A combo
+// bound twice keeps the later command, in the earlier position: a
+// hotkey can only be registered once.
+//
+// Carbon hotkeys (rather than a CGEventTap) keep working while another
+// app holds secure input (Terminal's Secure Keyboard Entry, password
+// fields), fire once per press, and need no permission.
+func hotkeysFor(binds []config.Bind) (keys []hotkey, unsupported []string) {
+	index := make(map[[2]uint32]int)
 	for _, b := range binds {
-		code, ok := keycodes[b.Keysym]
-		if !ok {
+		code, okCode := keycodes[b.Keysym]
+		mods, okMods := carbonMods(b.Mods)
+		if !okCode || !okMods {
 			unsupported = append(unsupported, b.Combo)
 			continue
 		}
-		out[combo{code: code, mods: b.Mods}] = b.Command
+		k := hotkey{combo: b.Combo, code: code, mods: mods, cmd: b.Command}
+		id := [2]uint32{uint32(code), mods}
+		if i, dup := index[id]; dup {
+			keys[i] = k
+			continue
+		}
+		index[id] = len(keys)
+		keys = append(keys, k)
 	}
-	return out, unsupported
-}
-
-// Match returns the command bound to a key-down with the given
-// CGEventFlags. Modifiers must match exactly.
-func (b Bindings) Match(code uint16, flags uint64) (string, bool) {
-	cmd, ok := b[combo{code: code, mods: modsFromFlags(flags)}]
-	return cmd, ok
-}
-
-// keyDown decides what the event tap does with a key-down: swallow
-// it when it is bound, and run the command only on the initial press,
-// not on autorepeat. Unbound keys pass through to the app.
-func keyDown(b Bindings, code uint16, flags uint64, repeat bool) (cmd string, run, swallow bool) {
-	cmd, ok := b.Match(code, flags)
-	if !ok {
-		return "", false, false
-	}
-	return cmd, !repeat, true
+	return keys, unsupported
 }

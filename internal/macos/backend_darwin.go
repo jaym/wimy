@@ -2,14 +2,13 @@ package macos
 
 /*
 #cgo CFLAGS: -x objective-c -fobjc-arc -Wno-deprecated-declarations
-#cgo LDFLAGS: -framework AppKit -framework ApplicationServices
+#cgo LDFLAGS: -framework AppKit -framework ApplicationServices -framework Carbon
 #include "bridge.h"
 */
 import "C"
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -36,10 +35,11 @@ var current *Backend
 type Backend struct {
 	*backend.Core
 
-	bindings  Bindings
+	hotkeys   []hotkey // index = Carbon hotkey id
 	applied   frames
 	known     map[wm.WindowID]bool
 	output    string // model name of the managed (primary) screen
+	usableW   int32  // its usable width in points
 	scheduled bool   // an apply pass is queued on the main queue
 	lastFocus wm.WindowID
 	notify    func()
@@ -54,17 +54,24 @@ var (
 func New(cfg *config.Config, configArg string, notify func()) *Backend {
 	b := &Backend{applied: frames{}, known: make(map[wm.WindowID]bool), notify: notify}
 	b.Core = backend.NewCore(cfg, configArg, b)
-	b.rebind()
 	current = b
 	return b
 }
 
+// rebind (re)registers the config's key bindings as Carbon hotkeys.
+// Main thread only, after wimy_app_init.
 func (b *Backend) rebind() {
-	bs, unsupported := NewBindings(b.Cfg.Binds)
+	C.wimy_hotkeys_clear()
+	keys, unsupported := hotkeysFor(b.Cfg.Binds)
 	for _, combo := range unsupported {
-		log.Printf("bind %q: no macOS key code for this key; ignored", combo)
+		log.Printf("bind %q: no macOS key or modifier for this combo; ignored", combo)
 	}
-	b.bindings = bs
+	b.hotkeys = keys
+	for id, k := range keys {
+		if st := C.wimy_hotkey_register(C.uint32_t(id), C.uint16_t(k.code), C.uint32_t(k.mods)); st != 0 {
+			log.Printf("bind %q: macOS refused the hotkey (OSStatus %d; another app may own it)", k.combo, int(st))
+		}
+	}
 }
 
 // Run checks the Accessibility permission, starts tracking windows and
@@ -78,10 +85,11 @@ func (b *Backend) Run(ctx context.Context) error {
 	}
 	C.wimy_app_init()
 	b.syncScreens()
-	if C.wimy_start_keytap() != 0 {
-		return errors.New("could not install the keyboard event tap; check the Accessibility permission")
-	}
+	b.rebind()
 	C.wimy_start_tracking()
+	// the windows already open would otherwise all stack in one
+	// column (new windows join the focused column, as in wmii)
+	b.State.SpreadColumns(spreadColumnCount(b.usableW))
 	b.StartAutostart()
 	b.markDirty()
 	C.wimy_app_run()
@@ -232,6 +240,7 @@ func (b *Backend) syncScreens() {
 	b.output = name
 	b.State.SetOutputGeometry(name, full.X, full.Y, full.W, full.H)
 	b.State.SetOutputUsable(name, usable.X, usable.Y, usable.W, usable.H)
+	b.usableW = usable.W
 }
 
 func frameOf(r C.wimy_rect) Frame {
@@ -291,16 +300,11 @@ func goTitleChanged(wid C.uint32_t, title *C.char) {
 	}
 }
 
-//export goKeyDown
-func goKeyDown(code C.uint16_t, flags C.uint64_t, repeat C.int) C.int {
+//export goHotKey
+func goHotKey(id C.uint32_t) {
 	b := current
-	cmd, run, swallow := keyDown(b.bindings, uint16(code), uint64(flags), repeat != 0)
-	if run {
-		b.Enqueue(cmd)
+	if int(id) < len(b.hotkeys) {
+		b.Enqueue(b.hotkeys[id].cmd)
 		b.markDirty()
 	}
-	if swallow {
-		return 1
-	}
-	return 0
 }

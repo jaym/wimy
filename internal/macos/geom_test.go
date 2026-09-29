@@ -80,3 +80,11 @@ func TestSameFrameTolerance(t *testing.T) {
 		t.Errorf("40pt difference treated as same")
 	}
 }
+
+func TestSpreadColumnCount(t *testing.T) {
+	for w, want := range map[int32]int{1512: 3, 2560: 5, 999: 1, 400: 1, 0: 1} {
+		if got := spreadColumnCount(w); got != want {
+			t.Errorf("spreadColumnCount(%d) = %d, want %d", w, got, want)
+		}
+	}
+}

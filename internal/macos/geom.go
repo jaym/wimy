@@ -55,3 +55,11 @@ func sameFrame(a, b wm.Rect) bool {
 	near := func(x, y int32) bool { return x-y <= 1 && y-x <= 1 }
 	return near(a.X, b.X) && near(a.Y, b.Y) && near(a.W, b.W) && near(a.H, b.H)
 }
+
+// minSpreadWidth is the narrowest column, in points, that spreading
+// existing windows at startup creates.
+const minSpreadWidth = 500
+
+// spreadColumnCount is how many columns the windows found at startup
+// are spread over on a usable area w points wide.
+func spreadColumnCount(w int32) int { return max(1, int(w/minSpreadWidth)) }

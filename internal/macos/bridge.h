@@ -19,8 +19,12 @@ void wimy_app_stop(void);
 void wimy_dispatch(uintptr_t handle); // any thread: goRunDispatched(handle) on the main queue
 void wimy_schedule_apply(void);       // goApply on the next main-queue pass
 void wimy_start_tracking(void);       // workspace + AX observers; reports existing windows
-int wimy_start_keytap(void);          // 0 ok, -1 failed
 int wimy_screens(wimy_screen *out, int max);
+
+// Carbon hotkeys: goHotKey(id) is called on each press. Returns 0 or
+// the OSStatus (e.g. eventHotKeyExistsErr when another app owns it).
+int wimy_hotkey_register(uint32_t id, uint16_t code, uint32_t mods);
+void wimy_hotkeys_clear(void);
 
 int wimy_window_frame(uint32_t wid, wimy_rect *out); // AX coordinates (top-left origin)
 // Returns 0 on success; the AXError of the position and final size

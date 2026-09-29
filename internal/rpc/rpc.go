@@ -18,6 +18,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -73,19 +74,28 @@ const (
 
 // SocketPath returns the socket path for the current session:
 // $WIMY_SOCKET if set, else $XDG_RUNTIME_DIR/wimy-$WAYLAND_DISPLAY.sock
-// (falling back to /tmp).
+// (falling back to the temp dir and wayland-0). On macOS, which has no
+// Wayland display, it is $TMPDIR/wimy.sock; launchd gives every agent
+// of a user the same $TMPDIR, so wimyctl and the daemon agree.
 func SocketPath() string {
-	if p := os.Getenv("WIMY_SOCKET"); p != "" {
+	return socketPath(runtime.GOOS, os.Getenv, os.TempDir())
+}
+
+func socketPath(goos string, getenv func(string) string, tmp string) string {
+	if p := getenv("WIMY_SOCKET"); p != "" {
 		return p
 	}
-	disp := os.Getenv("WAYLAND_DISPLAY")
+	disp := getenv("WAYLAND_DISPLAY")
+	if disp == "" && goos == "darwin" {
+		return filepath.Join(tmp, "wimy.sock")
+	}
 	if disp == "" {
 		disp = "wayland-0"
 	}
 	disp = strings.ReplaceAll(disp, "/", "_")
-	dir := os.Getenv("XDG_RUNTIME_DIR")
+	dir := getenv("XDG_RUNTIME_DIR")
 	if dir == "" {
-		dir = os.TempDir()
+		dir = tmp
 	}
 	return filepath.Join(dir, "wimy-"+disp+".sock")
 }

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -135,10 +136,10 @@ func TestDefaultsHaveWmiiBindings(t *testing.T) {
 			t.Errorf("missing default binding %q", combo)
 		}
 	}
-	// Mod-Shift-h must use the physical keysym h with Mod4|Shift
+	// Mod-Shift-h must use the physical keysym h with Mod|Shift
 	for _, b := range c.Binds {
 		if b.Combo == "Mod-Shift-h" {
-			if b.Keysym != 'h' || b.Mods != Mod4|ModShift {
+			if b.Keysym != 'h' || b.Mods != c.ModMask|ModShift {
 				t.Errorf("Mod-Shift-h: keysym=%x mods=%x", b.Keysym, b.Mods)
 			}
 		}
@@ -151,5 +152,33 @@ func TestUnknownSettingFails(t *testing.T) {
 	_ = os.WriteFile(path, []byte("bogus 1\n"), 0o644)
 	if _, err := Load(path); err == nil {
 		t.Fatalf("unknown setting should error")
+	}
+}
+
+func TestPlatformDefaultMod(t *testing.T) {
+	c := Default()
+	want, wantMask := "Mod4", Mod4
+	if runtime.GOOS == "darwin" {
+		want, wantMask = "Mod1", Mod1 // Option
+	}
+	if c.Mod != want || c.ModMask != wantMask {
+		t.Errorf("default mod = %q/%d, want %q/%d", c.Mod, c.ModMask, want, wantMask)
+	}
+}
+
+func TestMacModifierNames(t *testing.T) {
+	for name, mask := range map[string]uint32{"Option": Mod1, "opt": Mod1, "Cmd": Mod4, "command": Mod4} {
+		got, err := parseModName(name)
+		if err != nil || got != mask {
+			t.Errorf("parseModName(%q) = %d, %v; want %d", name, got, err, mask)
+		}
+	}
+	c := Default()
+	b, err := c.parseBind("Cmd-Option-h", "focus left")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Mods != Mod4|Mod1 || b.Keysym != 'h' {
+		t.Errorf("Cmd-Option-h: mods=%d keysym=%x", b.Mods, b.Keysym)
 	}
 }

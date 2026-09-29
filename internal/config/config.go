@@ -88,9 +88,19 @@ const (
 	Mod5     uint32 = 128
 )
 
+// osDefaults are the defaults that differ between operating systems
+// (defaults_darwin.go, defaults_other.go).
+type osDefaults struct {
+	mod      string
+	modMask  uint32
+	terminal string
+	launcher string
+	menu     string
+}
+
 // Config is the resolved wimy configuration.
 type Config struct {
-	Mod      string // name of the primary modifier: Mod1..Mod5 (default Mod4)
+	Mod      string // name of the primary modifier: Mod1..Mod5 (default Mod4; Option on macOS)
 	ModMask  uint32 // mask of the primary modifier
 	Terminal string
 	Launcher string // program launcher (Mod-p)
@@ -107,18 +117,17 @@ type Config struct {
 }
 
 // Default returns the built-in configuration: wmii's key binding set
-// with Mod4 as the modifier (wmii used Mod1; set `mod "Mod1"` for the
-// classic feel).
+// with Mod4 as the modifier on Linux (wmii used Mod1; set `mod "Mod1"`
+// for the classic feel) and Option on macOS.
 func Default() *Config {
 	c := &Config{
-		Mod:               "Mod4",
-		ModMask:           Mod4,
-		Terminal:          "alacritty",
+		Mod:               platformDefaults.mod,
+		ModMask:           platformDefaults.modMask,
+		Terminal:          platformDefaults.terminal,
 		FocusFollowsMouse: true,
-		// dmenu-style: a bar anchored to the top screen edge
-		Launcher:   "fuzzel --anchor top --width 120 --lines 10 --border-radius 0",
-		Menu:       "fuzzel --dmenu --anchor top --width 120 --lines 10 --border-radius 0",
-		StackStrip: 28,
+		Launcher:          platformDefaults.launcher,
+		Menu:              platformDefaults.menu,
+		StackStrip:        28,
 		Actions: map[string]string{
 			"quit": "wimyctl quit",
 		},
@@ -441,21 +450,21 @@ func (c *Config) applyNode(n *document.Node) error {
 
 func parseModName(s string) (uint32, error) {
 	switch strings.ToLower(s) {
-	case "mod1", "alt":
+	case "mod1", "alt", "option", "opt":
 		return Mod1, nil
 	case "mod3":
 		return Mod3, nil
-	case "mod4", "super", "logo":
+	case "mod4", "super", "logo", "cmd", "command":
 		return Mod4, nil
 	case "mod5":
 		return Mod5, nil
 	}
-	return 0, fmt.Errorf("unknown modifier %q (want Mod1, Mod3, Mod4 or Mod5)", s)
+	return 0, fmt.Errorf("unknown modifier %q (want Mod1, Mod3, Mod4, Mod5, Alt/Option or Super/Cmd)", s)
 }
 
 // parseBind parses a key combination like "Mod-Shift-h" plus a command
 // string into a Bind. "Mod" refers to the configured primary modifier;
-// Shift, Ctrl, Alt and Super are also recognized.
+// Shift, Ctrl, Alt/Option and Super/Cmd are also recognized.
 func (c *Config) parseBind(combo, cmd string) (Bind, error) {
 	b := Bind{Combo: combo, Command: cmd}
 	parts := strings.Split(combo, "-")
@@ -468,9 +477,9 @@ func (c *Config) parseBind(combo, cmd string) (Bind, error) {
 			b.Mods |= ModShift
 		case "ctrl", "control":
 			b.Mods |= ModCtrl
-		case "alt":
+		case "alt", "option", "opt":
 			b.Mods |= Mod1
-		case "super", "logo":
+		case "super", "logo", "cmd", "command":
 			b.Mods |= Mod4
 		default:
 			return b, fmt.Errorf("bind %q: unknown modifier %q", combo, m)

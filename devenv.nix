@@ -7,12 +7,14 @@
   # https://devenv.sh/packages/
   packages = [
     pkgs.git
-    pkgs.river # 0.4.x compositor (river-classic is the old monolithic one)
     pkgs.alacritty # terminal for testing
-    pkgs.fuzzel # launcher for testing
-    pkgs.foot # shm-rendered terminal, for headless tests (alacritty needs GL)
     pkgs.jq # for e2e.sh assertions
     pkgs.libxkbcommon # xkbcli, for keymap generation in e2e tests
+  ] ++ lib.optionals pkgs.stdenv.isLinux [
+    # Wayland-only; unavailable on darwin.
+    pkgs.river # 0.4.x compositor (river-classic is the old monolithic one)
+    pkgs.fuzzel # launcher for testing
+    pkgs.foot # shm-rendered terminal, for headless tests (alacritty needs GL)
   ];
 
   # https://devenv.sh/languages/

@@ -23,6 +23,9 @@ int wimy_start_keytap(void);          // 0 ok, -1 failed
 int wimy_screens(wimy_screen *out, int max);
 
 int wimy_window_frame(uint32_t wid, wimy_rect *out); // AX coordinates (top-left origin)
-int wimy_window_set_frame(uint32_t wid, double x, double y, double w, double h);
+// Returns 0 on success; the AXError of the position and final size
+// calls go to *perr and *serr (apps sometimes report an error for a
+// frame they did apply, so callers check by reading the frame back).
+int wimy_window_set_frame(uint32_t wid, double x, double y, double w, double h, int *perr, int *serr);
 void wimy_window_focus(uint32_t wid);
 void wimy_window_close(uint32_t wid);

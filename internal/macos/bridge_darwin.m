@@ -72,10 +72,15 @@ static int bool_attr(AXUIElementRef el, CFStringRef attr) {
 	return out;
 }
 
-static int has_attr(AXUIElementRef el, CFStringRef attr) {
-	CFTypeRef v = NULL;
-	int ok = AXUIElementCopyAttributeValue(el, attr, &v) == kAXErrorSuccess && v;
-	if (v) CFRelease(v);
+// zoom_enabled reports whether the window has an enabled zoom button.
+// Fixed-size windows (Calculator, preference panes) have one, but
+// disabled.
+static int zoom_enabled(AXUIElementRef win) {
+	CFTypeRef btn = NULL;
+	int ok = 0;
+	if (AXUIElementCopyAttributeValue(win, kAXZoomButtonAttribute, &btn) == kAXErrorSuccess && btn)
+		ok = bool_attr((AXUIElementRef)btn, kAXEnabledAttribute);
+	if (btn) CFRelease(btn);
 	return ok;
 }
 
@@ -104,7 +109,7 @@ static void track_window(pid_t pid, AXUIElementRef win, AXObserverRef obs) {
 	char *title = copy_str(win, kAXTitleAttribute);
 	char *subrole = copy_str(win, kAXSubroleAttribute);
 	goWindowAdded(wid, pid, (char *)bundle_of(pid), title, subrole,
-	              has_attr(win, kAXZoomButtonAttribute), bool_attr(win, kAXMinimizedAttribute));
+	              zoom_enabled(win), bool_attr(win, kAXMinimizedAttribute));
 	free(title);
 	free(subrole);
 }
@@ -310,7 +315,7 @@ static AXError set_size(AXUIElementRef el, double w, double h) {
 	return err;
 }
 
-int wimy_window_set_frame(uint32_t wid, double x, double y, double w, double h) {
+int wimy_window_set_frame(uint32_t wid, double x, double y, double w, double h, int *perr_out, int *serr_out) {
 	int i = find_win(wid);
 	if (i < 0) return -1;
 	AXUIElementRef el = wins[i].el;
@@ -323,6 +328,8 @@ int wimy_window_set_frame(uint32_t wid, double x, double y, double w, double h) 
 	AXError perr = AXUIElementSetAttributeValue(el, kAXPositionAttribute, pv);
 	CFRelease(pv);
 	AXError serr = set_size(el, w, h);
+	*perr_out = perr;
+	*serr_out = serr;
 	return (perr == kAXErrorSuccess && serr == kAXErrorSuccess) ? 0 : -1;
 }
 

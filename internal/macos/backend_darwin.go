@@ -165,8 +165,10 @@ func (b *Backend) apply() {
 			continue
 		}
 		r := p.Rect
-		if C.wimy_window_set_frame(C.uint32_t(p.ID), C.double(r.X), C.double(r.Y), C.double(r.W), C.double(r.H)) != 0 {
-			log.Printf("window %d: setting its frame failed", p.ID)
+		var perr, serr C.int
+		if C.wimy_window_set_frame(C.uint32_t(p.ID), C.double(r.X), C.double(r.Y), C.double(r.W), C.double(r.H), &perr, &serr) != 0 {
+			// often harmless: checkFrames reports whether it took
+			log.Printf("window %d: AX errors setting frame (position %d, size %d)", p.ID, perr, serr)
 		}
 		moved = append(moved, p)
 	}

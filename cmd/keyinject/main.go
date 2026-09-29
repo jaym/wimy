@@ -1,3 +1,5 @@
+//go:build linux
+
 // keyinject injects key events into a Wayland compositor via the
 // wlr virtual keyboard protocol. It is an end-to-end test tool:
 //

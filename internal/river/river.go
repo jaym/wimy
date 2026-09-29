@@ -1,3 +1,5 @@
+//go:build linux
+
 // Package river implements the Wayland backend of wimy: it speaks the
 // river-window-management-v1 protocol to the compositor, drives the
 // pure wm model, and applies the model's layout back to the

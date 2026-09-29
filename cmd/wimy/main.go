@@ -14,9 +14,17 @@ import (
 	"syscall"
 
 	"wimy/internal/config"
-	"wimy/internal/river"
 	"wimy/internal/rpc"
 )
+
+// wmBackend is what main needs from a platform backend.
+type wmBackend interface {
+	rpc.Backend
+	// Run runs the event loop until Shutdown or a fatal error.
+	Run(ctx context.Context) error
+	// Shutdown stops the event loop.
+	Shutdown()
+}
 
 func main() {
 	configPath := flag.String("config", "", "path to config.kdl (default ~/.config/wimy/config.kdl)")
@@ -40,11 +48,14 @@ func main() {
 	}
 
 	var server *rpc.Server
-	backend := river.New(cfg, *configPath, func() {
+	backend, err := newBackend(cfg, *configPath, func() {
 		if server != nil {
 			server.Notify()
 		}
 	})
+	if err != nil {
+		log.Fatalf("wimy: %v", err)
+	}
 
 	server, err = rpc.Listen(backend)
 	if err != nil {

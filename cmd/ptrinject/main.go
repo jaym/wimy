@@ -1,3 +1,5 @@
+//go:build linux
+
 // ptrinject injects pointer drags into a Wayland compositor via the
 // wlr virtual pointer protocol (with a virtual keyboard to hold a
 // modifier). It is an end-to-end test tool:

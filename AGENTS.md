@@ -191,6 +191,28 @@ go generate ./internal/proto
 - Outputs: mode/scale/position is NOT the compositor's or WM's job —
   kanshi/wlr-output-management (contrib/kanshi/).
 
+## macOS backend gotchas (`internal/macos`, learned on macOS 26)
+
+- Key bindings take two paths (`hotkey.viaTap`): combos with Control or
+  Command are Carbon `RegisterEventHotKey` hotkeys; Option/Shift-only
+  combos go through a CGEventTap. Carbon silently never delivers
+  Option-only combos on macOS 15+ (registration still succeeds), and
+  the tap receives nothing while any app holds secure input (Terminal's
+  Secure Keyboard Entry, Ghostty, password fields in browsers). The
+  holder is `kCGSSessionSecureInputPID` in
+  `CGSessionCopyCurrentDictionary()`; wimy logs changes. Don't "fix"
+  this by moving everything to one path.
+- Some apps return `kAXErrorFailure` from `AXUIElementSetAttributeValue`
+  for a frame they did apply; judge by reading the frame back.
+- The float heuristic needs the zoom button *enabled* (Calculator has a
+  disabled one).
+- A process started from a terminal is attributed to that terminal by
+  TCC: the terminal needs the Accessibility permission for bare-binary
+  runs.
+- Everything AX/AppKit runs on the main thread (`runtime.LockOSThread`
+  in `init`); other goroutines use `dispatch` (async) — `Snapshot`
+  waits on a channel, so it must never run on the main thread.
+
 ## Config (KDL) conventions
 
 - kdl-go requires `;` before `}` in single-line blocks:

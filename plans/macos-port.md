@@ -289,6 +289,38 @@ time to re-tile a view of 6 windows (Terminal, Safari, Finder, an
 Electron app) and flag any app that ignores size requests. If it's too
 slow, see the Swift fallback under Risks.
 
+**Phase 1 results (2026-09-29, MacBook Pro, macOS 26.6, `plans/macos-phase1.md`): GO.**
+- Re-tile speed: 6 windows (Terminal, Safari, Finder, VS Code, Ghostty,
+  Firefox) take 107–165 ms, typically ~125 ms (19–27 ms per window);
+  a single window 5–56 ms. The cost is per-app AX IPC, which a Swift
+  rewrite would pay too. Next speed-up: issue frame changes for
+  different apps concurrently (a re-tile would then take roughly as
+  long as the slowest app instead of the sum).
+- Apps that don't take the exact size: Terminal (snaps to its cell
+  grid, a few points off), Safari/Finder/VS Code (minimum heights,
+  VS Code 270 pt). Some apps return `kAXErrorFailure` (-25200) for a
+  frame they did apply, so success is judged by reading the frame back.
+- Float heuristic: Calculator has a zoom button that is *disabled*, so
+  the check is "zoom button enabled", not "present". TextEdit's launch
+  Open panel floats.
+- VS Code (Electron) appeared ~90 s after a cold launch; the AX
+  observer retry covers it, but slow apps are slow.
+- **Key input is the big finding** (see AGENTS.md macOS gotchas):
+  Carbon `RegisterEventHotKey` never fires for Option-only combos on
+  macOS 15+, and the CGEventTap sees them but is blinded while any app
+  holds secure input — which on the test machine Ghostty, Firefox
+  (password fields) and Terminal.app (Secure Keyboard Entry) all do.
+  wimy now routes combos with Ctrl/Cmd through Carbon (reliable
+  everywhere) and Option-only combos through the tap (dead under
+  secure input, logged). `Mod` stays Option; a compound `mod` such as
+  Ctrl-Option (config change) would make every binding reliable.
+- Startup: existing windows are spread over columns (one per 500 pt)
+  instead of all stacking in the focused column.
+- Follow-ups: darwin `terminal` default `open -na Terminal` starts a
+  new Terminal.app process per press that lingers after its window
+  closes (and holds secure input) — pick a better default; macOS
+  config path should honor `~/.config/wimy/config.kdl`.
+
 ### Phase 2 — views/tags, focus, multi-output
 
 - Hide/show via the corner (with the safety requirements above).

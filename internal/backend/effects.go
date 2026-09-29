@@ -24,14 +24,23 @@ func (c *Core) Spawn(argv []string) error {
 	return nil
 }
 
-// SpawnTerminal starts the configured terminal emulator.
+// SpawnTerminal starts the configured terminal emulator. Like
+// actions, the command line runs through sh -c, so it can quote
+// arguments (the macOS defaults need an AppleScript argument).
 func (c *Core) SpawnTerminal() error {
-	return c.Spawn(strings.Fields(c.Cfg.Terminal))
+	return c.spawnShell("terminal", c.Cfg.Terminal)
 }
 
-// SpawnMenu starts the configured program launcher.
+// SpawnMenu starts the configured program launcher through sh -c.
 func (c *Core) SpawnMenu() error {
-	return c.Spawn(strings.Fields(c.Cfg.Launcher))
+	return c.spawnShell("launcher", c.Cfg.Launcher)
+}
+
+func (c *Core) spawnShell(what, cmdline string) error {
+	if strings.TrimSpace(cmdline) == "" {
+		return fmt.Errorf("no %s configured", what)
+	}
+	return c.Spawn([]string{"sh", "-c", cmdline})
 }
 
 // Prompt runs the configured menu program in dmenu mode with the given

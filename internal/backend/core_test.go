@@ -173,3 +173,23 @@ func TestPromptQueuesAnswer(t *testing.T) {
 		t.Errorf("queue = %v, want [view web]", q)
 	}
 }
+
+func TestSpawnTerminalAndMenuUseShell(t *testing.T) {
+	dir := t.TempDir()
+	cfg := config.Default()
+	cfg.Terminal = `printf '%s' "terminal ok" > '` + filepath.Join(dir, "t") + `'`
+	cfg.Launcher = `printf '%s' "launcher ok" > '` + filepath.Join(dir, "l") + `'`
+	c, _ := newTestCore(t, cfg)
+	if err := c.SpawnTerminal(); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SpawnMenu(); err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{"t": "terminal ok", "l": "launcher ok"} {
+		waitFor(t, name+" written by the shell", func() bool {
+			b, err := os.ReadFile(filepath.Join(dir, name))
+			return err == nil && string(b) == want
+		})
+	}
+}

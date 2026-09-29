@@ -186,12 +186,26 @@ func Default() *Config {
 	return c
 }
 
-// DefaultPath returns ~/.config/wimy/config.kdl.
+// DefaultPath returns the config file path used when -config is not
+// given (see defaultPath).
 func DefaultPath() string {
-	if dir, err := os.UserConfigDir(); err == nil {
+	home, _ := os.UserHomeDir()
+	return defaultPath(os.Getenv, home)
+}
+
+// defaultPath is $XDG_CONFIG_HOME/wimy/config.kdl, else
+// ~/.config/wimy/config.kdl — on macOS too, rather than
+// ~/Library/Application Support, so dotfile managers put it in the
+// same place on both systems. A relative XDG_CONFIG_HOME is ignored,
+// as the XDG spec requires.
+func defaultPath(getenv func(string) string, home string) string {
+	if dir := getenv("XDG_CONFIG_HOME"); filepath.IsAbs(dir) {
 		return filepath.Join(dir, "wimy", "config.kdl")
 	}
-	return ""
+	if home == "" {
+		return ""
+	}
+	return filepath.Join(home, ".config", "wimy", "config.kdl")
 }
 
 // Load reads the config file at path, merging it over the defaults.

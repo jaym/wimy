@@ -182,3 +182,25 @@ func TestMacModifierNames(t *testing.T) {
 		t.Errorf("Cmd-Option-h: mods=%d keysym=%x", b.Mods, b.Keysym)
 	}
 }
+
+func TestDefaultPathXDG(t *testing.T) {
+	env := func(kv map[string]string) func(string) string {
+		return func(k string) string { return kv[k] }
+	}
+	cases := []struct {
+		name string
+		env  map[string]string
+		home string
+		want string
+	}{
+		{"XDG_CONFIG_HOME wins", map[string]string{"XDG_CONFIG_HOME": "/x"}, "/Users/me", "/x/wimy/config.kdl"},
+		{"~/.config otherwise (also on macOS)", map[string]string{}, "/Users/me", "/Users/me/.config/wimy/config.kdl"},
+		{"relative XDG_CONFIG_HOME is ignored", map[string]string{"XDG_CONFIG_HOME": "rel"}, "/home/me", "/home/me/.config/wimy/config.kdl"},
+		{"no home", map[string]string{}, "", ""},
+	}
+	for _, c := range cases {
+		if got := defaultPath(env(c.env), c.home); got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}

@@ -318,8 +318,8 @@ slow, see the Swift fallback under Risks.
   instead of all stacking in the focused column.
 - Follow-ups: darwin `terminal` default `open -na Terminal` starts a
   new Terminal.app process per press that lingers after its window
-  closes (and holds secure input) — pick a better default; macOS
-  config path should honor `~/.config/wimy/config.kdl`.
+  closes (and holds secure input) — pick a better default. (Done: the
+  config is read from `~/.config/wimy/config.kdl` on macOS too.)
 
 ### Phase 2 — views/tags, focus, multi-output
 

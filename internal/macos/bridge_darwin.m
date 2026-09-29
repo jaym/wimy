@@ -234,6 +234,12 @@ void wimy_schedule_apply(void) {
 	});
 }
 
+void wimy_schedule_apply_after(int ms) {
+	dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)ms * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+		goApply();
+	});
+}
+
 void wimy_start_tracking(void) {
 	NSNotificationCenter *wc = [[NSWorkspace sharedWorkspace] notificationCenter];
 	[wc addObserverForName:NSWorkspaceDidLaunchApplicationNotification object:nil queue:[NSOperationQueue mainQueue]

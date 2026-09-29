@@ -39,7 +39,7 @@ type Backend struct {
 	tapKeys   tapKeys  // the bindings the event tap delivers
 	tapOn     bool     // the event tap is installed
 	securePID int      // process holding secure input, 0 if none
-	applied   frames
+	applied   *frames
 	known     map[wm.WindowID]bool
 	output    string // model name of the managed (primary) screen
 	usableW   int32  // its usable width in points
@@ -55,7 +55,7 @@ var (
 // New creates the macOS backend. notify is called on the main thread
 // after every apply pass; it must not block.
 func New(cfg *config.Config, configArg string, notify func()) *Backend {
-	b := &Backend{applied: frames{}, known: make(map[wm.WindowID]bool), notify: notify}
+	b := &Backend{applied: newFrames(), known: make(map[wm.WindowID]bool), notify: notify}
 	b.Core = backend.NewCore(cfg, configArg, b)
 	current = b
 	return b
@@ -232,22 +232,38 @@ func (b *Backend) apply() {
 	}
 }
 
-// checkFrames reads back the windows just moved and logs apps that
-// refused the requested frame (minimum sizes, slow apps).
+// frameRetryDelay is how long apply waits before re-sending a frame
+// an app didn't take (it may still be restoring its own saved frame).
+const frameRetryDelay = 200 // ms
+
+// checkFrames reads back the windows just moved. A window that didn't
+// end up where it was put (the app moved it itself right after
+// creation, AX was busy, or it has a minimum size) gets its frame
+// re-sent a bounded number of times; the rest is logged.
 func (b *Backend) checkFrames(ps []wm.Placement) {
+	retry := false
 	for _, p := range ps {
 		var f C.wimy_rect
-		if C.wimy_window_frame(C.uint32_t(p.ID), &f) != 0 {
+		ok := C.wimy_window_frame(C.uint32_t(p.ID), &f) == 0
+		got := wm.Rect{X: int32(f.x), Y: int32(f.y), W: int32(f.w), H: int32(f.h)}
+		if ok && sameFrame(got, p.Rect) {
+			b.applied.matched(p.ID)
 			continue
 		}
-		got := wm.Rect{X: int32(f.x), Y: int32(f.y), W: int32(f.w), H: int32(f.h)}
-		if !sameFrame(got, p.Rect) {
+		if b.applied.mismatch(p.ID) {
+			retry = true
+			continue
+		}
+		if ok {
 			app := ""
 			if w := b.State.Windows[p.ID]; w != nil {
 				app = w.AppID
 			}
 			log.Printf("window %d (%s) is %+v, wanted %+v", p.ID, app, got, p.Rect)
 		}
+	}
+	if retry {
+		C.wimy_schedule_apply_after(frameRetryDelay)
 	}
 }
 

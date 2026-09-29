@@ -32,22 +32,67 @@ func ShouldFloat(subrole string, hasZoom bool) bool {
 	return subrole != "AXStandardWindow" || !hasZoom
 }
 
-// frames remembers the last frame requested for each window so apply
-// only talks to AX for windows whose placement changed.
-type frames map[wm.WindowID]wm.Rect
+// maxFrameRetries is how often apply re-sends a frame an app didn't
+// take (it moved the window itself after creation, or AX was busy)
+// before giving up until the layout moves the window again. Apps with
+// a minimum size never take a smaller frame; the bound keeps them from
+// causing an AX call storm.
+const maxFrameRetries = 3
 
-// changed records r for id and reports whether it differs from the
-// last recorded frame.
-func (f frames) changed(id wm.WindowID, r wm.Rect) bool {
-	if old, ok := f[id]; ok && old == r {
+// frames remembers the last frame requested for each window so apply
+// only talks to AX for windows whose placement changed, and budgets
+// retries for windows that didn't end up where they were put.
+type frames struct {
+	applied map[wm.WindowID]wm.Rect
+	stale   map[wm.WindowID]bool // applied, but the app didn't take it
+	retries map[wm.WindowID]int
+}
+
+func newFrames() *frames {
+	return &frames{
+		applied: make(map[wm.WindowID]wm.Rect),
+		stale:   make(map[wm.WindowID]bool),
+		retries: make(map[wm.WindowID]int),
+	}
+}
+
+// changed records r for id and reports whether it must be sent: it
+// differs from the last recorded frame, or that one didn't take and
+// is being retried. A different placement resets the retry budget.
+func (f *frames) changed(id wm.WindowID, r wm.Rect) bool {
+	old, ok := f.applied[id]
+	if ok && old == r && !f.stale[id] {
 		return false
 	}
-	f[id] = r
+	if !ok || old != r {
+		delete(f.retries, id)
+	}
+	delete(f.stale, id)
+	f.applied[id] = r
 	return true
 }
 
+// mismatch records that id's actual frame differs from the requested
+// one. It reports whether to try again; if so the next apply re-sends
+// the frame.
+func (f *frames) mismatch(id wm.WindowID) bool {
+	if f.retries[id] >= maxFrameRetries {
+		return false
+	}
+	f.retries[id]++
+	f.stale[id] = true
+	return true
+}
+
+// matched records that id took its frame, restoring the retry budget.
+func (f *frames) matched(id wm.WindowID) { delete(f.retries, id) }
+
 // forget drops id, so its next placement is applied again.
-func (f frames) forget(id wm.WindowID) { delete(f, id) }
+func (f *frames) forget(id wm.WindowID) {
+	delete(f.applied, id)
+	delete(f.stale, id)
+	delete(f.retries, id)
+}
 
 // sameFrame reports whether an app's actual frame matches the
 // requested one, allowing 1pt of rounding on every edge.

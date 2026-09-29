@@ -18,6 +18,7 @@ void wimy_app_run(void);   // returns after wimy_app_stop
 void wimy_app_stop(void);
 void wimy_dispatch(uintptr_t handle); // any thread: goRunDispatched(handle) on the main queue
 void wimy_schedule_apply(void);       // goApply on the next main-queue pass
+void wimy_schedule_apply_after(int ms); // goApply after a delay
 void wimy_start_tracking(void);       // workspace + AX observers; reports existing windows
 int wimy_screens(wimy_screen *out, int max);
 

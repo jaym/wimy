@@ -7,6 +7,7 @@ import (
 
 	"hazelnut.eclair.cafe/wlcl"
 
+	"wimy/internal/backend"
 	"wimy/internal/proto"
 	"wimy/internal/wm"
 )
@@ -189,7 +190,7 @@ type Seat struct {
 	LastX int32
 	LastY int32
 
-	Op         SeatOp
+	Op         backend.PointerOp
 	OpDx, OpDy int32
 	OpReleased bool
 }

@@ -517,12 +517,12 @@ func (b *Backend) applyManage() {
 		if s.Op != nil {
 			switch {
 			case s.OpReleased:
-				s.Op.End(s)
+				b.endOp(s.Op)
 				s.Object.OpEnd()
 				s.Op = nil
 				s.OpReleased = false
 			default:
-				s.Op.Apply(s, s.OpDx, s.OpDy)
+				s.Op.Apply(s.OpDx, s.OpDy)
 			}
 		}
 	}

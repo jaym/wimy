@@ -3,13 +3,11 @@
 package main
 
 import (
-	"errors"
-
 	"wimy/internal/config"
+	"wimy/internal/macos"
 )
 
-// newBackend will return the macOS backend (plans/macos-port.md,
-// Phase 1). Until then wimy builds on darwin but refuses to start.
+// newBackend returns the macOS (Accessibility API) backend.
 func newBackend(cfg *config.Config, configArg string, notify func()) (wmBackend, error) {
-	return nil, errors.New("the macOS backend is not implemented yet (plans/macos-port.md, Phase 1)")
+	return macos.New(cfg, configArg, notify), nil
 }

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -201,6 +202,15 @@ func TestDefaultPathXDG(t *testing.T) {
 	for _, c := range cases {
 		if got := defaultPath(env(c.env), c.home); got != c.want {
 			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+func TestCompoundModUnsupported(t *testing.T) {
+	for _, mod := range []string{"Ctrl-Option", "Option+Ctrl", "Hyper"} {
+		_, err := parseModName(mod)
+		if err == nil || !strings.Contains(err.Error(), "single modifier") {
+			t.Errorf("mod %q: err = %v, want a 'single modifier' error", mod, err)
 		}
 	}
 }

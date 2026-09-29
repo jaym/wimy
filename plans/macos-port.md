@@ -316,10 +316,14 @@ slow, see the Swift fallback under Risks.
   Ctrl-Option (config change) would make every binding reliable.
 - Startup: existing windows are spread over columns (one per 500 pt)
   instead of all stacking in the focused column.
-- Follow-ups: darwin `terminal` default `open -na Terminal` starts a
-  new Terminal.app process per press that lingers after its window
-  closes (and holds secure input) — pick a better default. (Done: the
-  config is read from `~/.config/wimy/config.kdl` on macOS too.)
+- Follow-ups done: the config is read from `~/.config/wimy/config.kdl`
+  on macOS too; the `terminal` default is the first installed of
+  Ghostty (AppleScript `new window`), Alacritty, kitty
+  (`--single-instance`), Terminal.app (`open -a Terminal ~`), each
+  reusing the running app instead of `open -na`'s process per press.
+- Decided: compound `mod` values (Ctrl-Option, Hyper) are **not
+  supported**; the secure-input shortcoming of Option-only bindings is
+  documented in the README instead.
 
 ### Phase 2 — views/tags, focus, multi-output
 

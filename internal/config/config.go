@@ -473,7 +473,10 @@ func parseModName(s string) (uint32, error) {
 	case "mod5":
 		return Mod5, nil
 	}
-	return 0, fmt.Errorf("unknown modifier %q (want Mod1, Mod3, Mod4, Mod5, Alt/Option or Super/Cmd)", s)
+	// Compound modifiers (Ctrl-Option, Hyper) are deliberately not
+	// supported: bindings name extra modifiers explicitly instead.
+	return 0, fmt.Errorf("mod %q: must be a single modifier (Mod1, Mod3, Mod4, Mod5, Alt/Option or Super/Cmd); "+
+		"combinations such as Ctrl-Option are not supported", s)
 }
 
 // parseBind parses a key combination like "Mod-Shift-h" plus a command

@@ -17,8 +17,10 @@ const (
 
 // keycodes maps the keysyms config.parseKeysym produces to macOS
 // virtual key codes (Carbon kVK_*). The kVK_ANSI_* codes are physical
-// positions on an ANSI keyboard, independent of the active layout, so
-// combos keep naming the physical key as on Linux.
+// positions on an ANSI keyboard, independent of the active layout: on a
+// non-US layout a combo names the key at the US position. That differs
+// from Linux, where river matches the active layout's base keysym
+// (documented in the README's macOS section).
 var keycodes = map[uint32]uint16{
 	'a': 0x00, 's': 0x01, 'd': 0x02, 'f': 0x03, 'h': 0x04, 'g': 0x05,
 	'z': 0x06, 'x': 0x07, 'c': 0x08, 'v': 0x09, 'b': 0x0B, 'q': 0x0C,

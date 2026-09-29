@@ -201,7 +201,20 @@ go generate ./internal/proto
   Secure Keyboard Entry, Ghostty, password fields in browsers). The
   holder is `kCGSSessionSecureInputPID` in
   `CGSessionCopyCurrentDictionary()`; wimy logs changes. Don't "fix"
-  this by moving everything to one path.
+  this by moving everything to one path. Compound `mod` values (e.g.
+  Ctrl-Option, Hyper) are deliberately unsupported — `parseModName`
+  rejects them; users add modifiers per binding. README "macOS"
+  documents the shortcomings for users.
+- The event tap runs on its own thread (an active tap stalls all
+  typing until its callback returns, and AX calls on the main thread
+  can block for a second each); it reads bindings through
+  `tapRouter`'s atomic table and dispatches commands to the main queue.
+- `terminal`/`launcher` run through `sh -c`. The darwin `terminal`
+  default (`pickMacTerminal`) must open a window in the running app:
+  `open -na` starts a new app instance per press, and Ghostty, kitty and
+  Terminal.app keep those running after their windows close (and
+  Terminal.app then holds secure input). Ghostty's `+new-window` is
+  Linux-only; its AppleScript `new window` works.
 - Some apps return `kAXErrorFailure` from `AXUIElementSetAttributeValue`
   for a frame they did apply; judge by reading the frame back.
 - The float heuristic needs the zoom button *enabled* (Calculator has a

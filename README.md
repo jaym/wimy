@@ -75,8 +75,7 @@ river -c ./wimy
 Copy `config.kdl` to `~/.config/wimy/config.kdl` to customize; the
 built-in defaults are the wmii key binding set with Mod4 (Super) as the
 modifier. Use `mod "Mod1"` for the classic wmii Alt modifier. (On
-macOS, where a backend is in progress, the default is Option, and
-`Option`/`Cmd` are accepted as modifier names.) wimy logs
+macOS the default is Option; see [macOS](#macos-work-in-progress).) wimy logs
 its control socket path, normally `$XDG_RUNTIME_DIR/wimy-$WAYLAND_DISPLAY.sock`.
 
 ## Usage
@@ -298,6 +297,51 @@ cp contrib/kanshi/config ~/.config/kanshi/config   # then edit
 and add `exec "kanshi"` to the `autostart` block of `config.kdl`.
 See [`contrib/kanshi/config`](contrib/kanshi/config) for examples
 converting sway-style `output … scale …` lines.
+
+## macOS (work in progress)
+
+A macOS backend is being built (`plans/macos-port.md`). It currently
+tiles the primary screen and runs the key bindings; switching views,
+multiple screens, titlebars and the mouse come later. It needs the
+Accessibility permission (System Settings → Privacy & Security →
+Accessibility) for whatever starts it — for now the terminal you run
+`wimy` from.
+
+- **Config:** `~/.config/wimy/config.kdl` (or
+  `$XDG_CONFIG_HOME/wimy/config.kdl`), the same place as on Linux.
+- **Modifier:** `Mod` defaults to Option; `Option`/`Opt` and
+  `Cmd`/`Command` are accepted as modifier names everywhere.
+- **Terminal:** Mod-Return opens a new window of the first installed of
+  Ghostty, Alacritty and kitty, else Terminal.app, reusing the running
+  app. With Ghostty this goes through AppleScript, so macOS asks once
+  to allow controlling Ghostty. `terminal` and `launcher` run through
+  `sh -c`, so they may quote arguments.
+
+### Known shortcomings of key bindings on macOS
+
+macOS gives a window manager no single way to see every key combo:
+
+- Bindings that include **Ctrl or Cmd** are Carbon hotkeys. They work
+  everywhere, including in password fields and terminals.
+- Bindings whose only modifiers are **Option (and Shift)** — which is
+  every default binding, since `Mod` is Option — go through an event
+  tap, because macOS 15+ never delivers such combos as hotkeys. An
+  event tap receives **nothing while any app holds secure input**:
+  Terminal.app with *Secure Keyboard Entry*, Ghostty's *Secure Keyboard
+  Entry* (on by default at password prompts), and password fields in
+  browsers. While that lasts those bindings do nothing and the keys
+  reach the app instead (Option-h types ˙). wimy logs when an app
+  takes or releases secure input.
+- Option-only combos you *don't* bind still type their characters
+  (Option-e is the accent dead key).
+- `mod` must be a **single** modifier. Combinations such as
+  `mod "Ctrl-Option"` or a "Hyper" key are **not supported**. If you
+  need bindings that keep working under secure input, write the extra
+  modifier into those bindings explicitly, e.g.
+  `bind "Ctrl-Option-h" { focus "left"; }`.
+- Key combos are macOS key codes of the US layout's physical keys, so
+  on non-US layouts a combo names the key at that US position (Linux
+  matches the active layout's keysym instead).
 
 ## Current limitations
 

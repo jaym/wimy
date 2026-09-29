@@ -24,7 +24,7 @@ wimy — a separate client process speaking the stable
   waybar, …) work; bars with exclusive zones reserve space, launchers
   with exclusive keyboard focus dim window borders until dismissed.
 - **KDL configuration** with comments; external bar and launcher.
-- No cgo: pure Go via [wlcl](https://codeberg.org/vyivel/wlcl).
+- Pure Go on Linux (no cgo) via [wlcl](https://codeberg.org/vyivel/wlcl).
 
 ## Installing on Arch Linux
 
@@ -74,7 +74,9 @@ river -c ./wimy
 
 Copy `config.kdl` to `~/.config/wimy/config.kdl` to customize; the
 built-in defaults are the wmii key binding set with Mod4 (Super) as the
-modifier. Use `mod "Mod1"` for the classic wmii Alt modifier. wimy logs
+modifier. Use `mod "Mod1"` for the classic wmii Alt modifier. (On
+macOS, where a backend is in progress, the default is Option, and
+`Option`/`Cmd` are accepted as modifier names.) wimy logs
 its control socket path, normally `$XDG_RUNTIME_DIR/wimy-$WAYLAND_DISPLAY.sock`.
 
 ## Usage
@@ -322,7 +324,8 @@ shared memory; alacritty needs GL and only works on real hardware.
 cmd/wimy         daemon (Wayland event loop + RPC server)
 cmd/wimyctl      control CLI
 internal/wm      pure model: views, tags, columns, modes, layout solver (unit-tested)
-internal/river   river-window-management-v1 backend
+internal/backend platform-neutral backend core (queue, effects, autostart, reload, pointer ops)
+internal/river   river-window-management-v1 backend (Linux)
 internal/rpc     JSON-RPC 2.0 server/client over unix socket
 internal/command command registry shared by key bindings, RPC and config
 internal/config  KDL configuration

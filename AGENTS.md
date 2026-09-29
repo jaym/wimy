@@ -3,7 +3,9 @@
 ## What this is
 
 **wimy** is a wmii-style window manager for the [river](https://codeberg.org/river/river)
-Wayland compositor (0.4+), written in pure Go (no cgo). It runs as a
+Wayland compositor (0.4+), written in Go: pure Go on Linux; the macOS
+backend (in progress, `plans/macos-port.md`) will use cgo behind
+`//go:build darwin`. It runs as a
 *client* of river via the `river-window-management-v1` protocol: river
 owns rendering/input plumbing, wimy owns all window-management policy
 (tags, columns, focus, keybindings). Control interface is JSON-RPC 2.0
@@ -15,11 +17,15 @@ external (waybar/fuzzel).
 ```
 cmd/wimy           daemon: Wayland event loop + RPC server (main entry)
 cmd/wimyctl        control CLI (run/state/subscribe/quit)
-cmd/keyinject      test tool: injects key events via wlr virtual keyboard
+cmd/keyinject      test tool (Linux): injects key events via wlr virtual keyboard
+cmd/ptrinject      test tool (Linux): injects pointer motion/buttons (wlr virtual pointer)
 internal/wm        PURE model: views/tags/columns/modes/floating/focus +
                    layout solver. NO Wayland imports. Unit-tested heavily.
-internal/river     river protocol backend: manage/render sequences,
-                   object tracking, borders/titlebars, effects (spawn etc.)
+internal/backend   platform-neutral backend core shared by river and
+                   macOS: command queue, spawn/prompt effects, autostart,
+                   reload bookkeeping, pointer-op math. Unit-tested.
+internal/river     (Linux) river protocol backend: manage/render sequences,
+                   object tracking, borders/titlebars; embeds backend.Core
 internal/rpc       JSON-RPC 2.0 server + client helpers, state snapshots
 internal/command   command registry shared by keybindings, RPC, config
 internal/config    KDL config loading/validation + defaults
@@ -35,17 +41,27 @@ e2e*.sh            end-to-end tests against headless river (see below)
 
 ```sh
 go build ./...          # build everything
-go test ./...           # unit tests (internal/wm, config, command, titlebar)
+go test ./...           # unit tests (wm, backend, config, command, rpc, titlebar)
 go vet ./...            # must stay clean
 gofmt -l cmd internal   # must print nothing (except gen.go is fine)
 
-./e2e.sh       # 22 checks: core WM flows via wimyctl (headless river)
-./e2e-multi.sh #  7 checks: multi-output behavior
-./e2e-keys.sh  #  6 checks: REAL key events → bindings (virtual keyboard)
-./e2e-layer.sh #  5 checks: layer shell (fuzzel survives, focus events)
-./e2e-deco.sh  #  7 checks: decorations (use_ssd, titlebars, clips)
-./e2e-mouse.sh #  6 checks: pointer drags (virtual pointer), grow binding
+./e2e.sh        # 26 checks: core WM flows via wimyctl (headless river)
+./e2e-multi.sh  #  7 checks: multi-output behavior
+./e2e-keys.sh   #  6 checks: REAL key events → bindings (virtual keyboard)
+./e2e-layer.sh  #  5 checks: layer shell (fuzzel survives, focus events)
+./e2e-deco.sh   #  7 checks: decorations (use_ssd, titlebars, clips)
+./e2e-mouse.sh  # 14 checks: pointer drags (virtual pointer), grow binding
+./e2e-reload.sh # 22 checks: hot config reload (bindings, titlebar, autostart)
+./e2e-all.sh    # builds bin/ and runs all seven suites
+./ci.sh         # Linux CI: gofmt, vet, unit tests, CGO_ENABLED=0 build, e2e-all
 ```
+
+The e2e suites need Linux. GitHub Actions (`.github/workflows/ci.yml`)
+runs `ci.sh` in the devenv shell on Linux and build/vet/`go test -race`
+on macOS. On a Mac, compile-check the river backend with
+`CGO_ENABLED=0 GOOS=linux go build ./... && CGO_ENABLED=0 GOOS=linux go vet ./...`
+(`CGO_ENABLED=0` matters: with a C compiler on PATH the cross-build
+otherwise tries cgo and fails).
 
 The e2e scripts run `river` with `WLR_BACKENDS=headless
 WLR_RENDERER=pixman` in a throwaway `$XDG_RUNTIME_DIR` and drive wimy
@@ -75,8 +91,10 @@ go generate ./internal/proto
    traffic. Other goroutines (RPC, prompts) may only touch wayland
    objects inside `conn.DoSync` — and NEVER call DoSync from the
    dispatch goroutine itself (self-deadlock). Async commands go
-   through the queue + `ManageDirty()`; the queue drains inside
-   `manage_start`.
+   through `backend.Core.QueueCommand`, which calls the backend's
+   `Wake` (`ManageDirty()` on river); key bindings, which fire on the
+   dispatch goroutine, use `Enqueue`, which doesn't wake. The queue
+   drains inside `manage_start`.
 4. **One command registry** (`internal/command`): keybindings, RPC
    `run`, and config all dispatch through the same table. Add new
    actions there, not as special cases in the backend.
@@ -184,8 +202,10 @@ go generate ./internal/proto
   reload`): bindings are re-declared to the compositor, live-read
   values swap, and autostart processes are reconciled (added → spawn,
   removed → SIGTERM/grace/SIGKILL, changed → re-exec, crashed →
-  restart). `Backend.applyConfig` (internal/river/reload.go) is the
-  single apply path — extend it when adding config sections.
+  restart). `Core.applyConfig` (internal/backend/reload.go) is the
+  single apply path; protocol-side sections go through the backend's
+  `ApplyConfigChange` hook (internal/river/reload.go) — extend both
+  when adding config sections.
 - Key combos name the PHYSICAL key (see gotchas above).
 
 ## Testing philosophy

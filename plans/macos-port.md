@@ -249,8 +249,20 @@ Also:
 - `config`: per-OS `Mod` default, per-OS `terminal`/`menu` defaults,
   keycode table under `//go:build darwin`.
 
-Verification: `go test ./...`, `go vet`, gofmt, **all six e2e suites
+Verification: `go test ./...`, `go vet`, gofmt, **all seven e2e suites
 pass unchanged**. This phase is safe to land on its own.
+
+**Status (2026-09-29):** done on branch `macos-phase0`
+(`plans/macos-phase0.md`). Deviations from the list above:
+- `internal/proto` is not build-tagged: it compiles on darwin, and
+  tagging it would mean editing the generated `gen.go`.
+- The darwin keycode table moved to Phase 1: only `internal/macos`
+  consumes it, so nothing in Phase 0 could exercise it.
+- The e2e suites run in GitHub Actions (`ci.sh` in the devenv shell),
+  since the development Mac can't run river.
+- The darwin `terminal`/`launcher`/`menu` defaults are provisional
+  (`open -na Terminal`, `open -a Spotlight`, `choose`); verify them in
+  Phase 1.
 
 ### Phase 1 — macOS spike: tiling + keys on one screen (go/no-go)
 

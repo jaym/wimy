@@ -22,8 +22,9 @@ void wimy_schedule_apply_after(int ms); // goApply after a delay
 void wimy_start_tracking(void);       // workspace + AX observers; reports existing windows
 int wimy_screens(wimy_screen *out, int max);
 
-// Event tap for bindings Carbon can't deliver (Option-only combos):
-// goKeyDown decides whether to swallow each key-down. 0 ok, -1 failed.
+// Event tap for bindings Carbon can't deliver (Option-only combos). It
+// runs on its own thread: goKeyDown is called there and decides whether
+// to swallow each key-down. 0 ok, -1 failed.
 int wimy_start_keytap(void);
 int wimy_secure_input_pid(void); // 0 when no app holds secure input
 

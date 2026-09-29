@@ -35,10 +35,10 @@ var current *Backend
 type Backend struct {
 	*backend.Core
 
-	hotkeys   []hotkey // all bindings; index = Carbon hotkey id
-	tapKeys   tapKeys  // the bindings the event tap delivers
-	tapOn     bool     // the event tap is installed
-	securePID int      // process holding secure input, 0 if none
+	hotkeys   []hotkey  // all bindings; index = Carbon hotkey id
+	tap       tapRouter // bindings the event tap delivers; read on the tap thread
+	tapOn     bool      // the event tap is installed
+	securePID int       // process holding secure input, 0 if none
 	applied   *frames
 	known     map[wm.WindowID]bool
 	output    string // model name of the managed (primary) screen
@@ -71,7 +71,7 @@ func (b *Backend) rebind() {
 		log.Printf("bind %q: no macOS key or modifier for this combo; ignored", combo)
 	}
 	b.hotkeys = keys
-	b.tapKeys = newTapKeys(keys)
+	b.tap.set(keys)
 	for id, k := range keys {
 		if k.viaTap() {
 			continue
@@ -80,7 +80,7 @@ func (b *Backend) rebind() {
 			log.Printf("bind %q: macOS refused the hotkey (OSStatus %d; another app may own it)", k.combo, int(st))
 		}
 	}
-	if len(b.tapKeys) > 0 && !b.tapOn {
+	if b.tap.active() && !b.tapOn {
 		if C.wimy_start_keytap() != 0 {
 			log.Printf("could not install the keyboard event tap: bindings without Ctrl or Cmd won't work")
 		} else {
@@ -98,7 +98,7 @@ func (b *Backend) checkSecureInput() {
 		return
 	}
 	b.securePID = pid
-	if len(b.tapKeys) == 0 {
+	if !b.tap.active() {
 		return
 	}
 	if pid != 0 {
@@ -361,13 +361,19 @@ func goHotKey(id C.uint32_t) {
 	}
 }
 
+// goKeyDown runs on the event tap's thread: it only looks the key up
+// and hands the command to the main thread, so the tap never waits on
+// AX calls.
+//
 //export goKeyDown
 func goKeyDown(code C.uint16_t, flags C.uint64_t, repeat C.int) C.int {
 	b := current
-	id, run, swallow := b.tapKeys.keyDown(uint16(code), uint64(flags), repeat != 0)
+	cmd, run, swallow := b.tap.keyDown(uint16(code), uint64(flags), repeat != 0)
 	if run {
-		b.Enqueue(b.hotkeys[id].cmd)
-		b.markDirty()
+		dispatch(func() {
+			b.Enqueue(cmd)
+			b.markDirty()
+		})
 	}
 	if swallow {
 		return 1

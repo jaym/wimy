@@ -1,6 +1,10 @@
 package macos
 
-import "wimy/internal/config"
+import (
+	"sync/atomic"
+
+	"wimy/internal/config"
+)
 
 // Carbon modifier bits for RegisterEventHotKey (Events.h: cmdKey,
 // shiftKey, optionKey, controlKey).
@@ -162,4 +166,47 @@ func (t tapKeys) keyDown(code uint16, flags uint64, repeat bool) (id int, run, s
 		return 0, false, false
 	}
 	return id, !repeat, true
+}
+
+// tapRouter holds the bindings the event tap delivers. The tap runs on
+// its own thread (so blocking AX calls on the main thread never stall
+// system-wide typing), while reload replaces the bindings on the main
+// thread; the table is swapped atomically. The zero value delivers
+// nothing.
+type tapRouter struct {
+	table atomic.Pointer[tapTable]
+}
+
+type tapTable struct {
+	keys tapKeys
+	cmds []string // by hotkey index
+}
+
+// set replaces the bindings with the tap-delivered ones among keys.
+func (r *tapRouter) set(keys []hotkey) {
+	t := &tapTable{keys: newTapKeys(keys), cmds: make([]string, len(keys))}
+	for i, k := range keys {
+		t.cmds[i] = k.cmd
+	}
+	r.table.Store(t)
+}
+
+// active reports whether any binding goes through the tap.
+func (r *tapRouter) active() bool {
+	t := r.table.Load()
+	return t != nil && len(t.keys) > 0
+}
+
+// keyDown is tapKeys.keyDown on the current table, returning the
+// command to run. Safe from any thread.
+func (r *tapRouter) keyDown(code uint16, flags uint64, repeat bool) (cmd string, run, swallow bool) {
+	t := r.table.Load()
+	if t == nil {
+		return "", false, false
+	}
+	id, run, swallow := t.keys.keyDown(code, flags, repeat)
+	if swallow {
+		cmd = t.cmds[id]
+	}
+	return cmd, run, swallow
 }

@@ -5,6 +5,7 @@
 #import <AppKit/AppKit.h>
 #include <ApplicationServices/ApplicationServices.h>
 #include <Carbon/Carbon.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -272,14 +273,30 @@ static CGEventRef keytap_cb(CGEventTapProxy proxy, CGEventType type, CGEventRef 
 	return goKeyDown(code, CGEventGetFlags(ev), repeat) ? NULL : ev;
 }
 
+// keytap_thread runs the tap's run loop. An active tap holds every
+// key-down system-wide until its callback returns, so it must not share
+// the main thread with AX calls that can block for a second each on an
+// unresponsive app.
+static void *keytap_thread(void *arg) {
+	CFRunLoopSourceRef src = arg;
+	CFRunLoopAddSource(CFRunLoopGetCurrent(), src, kCFRunLoopCommonModes);
+	CFRelease(src);
+	CFRunLoopRun();
+	return NULL;
+}
+
 int wimy_start_keytap(void) {
 	keytap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault,
 	                          CGEventMaskBit(kCGEventKeyDown), keytap_cb, NULL);
 	if (!keytap) return -1;
 	CFRunLoopSourceRef src = CFMachPortCreateRunLoopSource(NULL, keytap, 0);
-	CFRunLoopAddSource(CFRunLoopGetMain(), src, kCFRunLoopCommonModes);
-	CFRelease(src);
 	CGEventTapEnable(keytap, true);
+	pthread_t th;
+	if (pthread_create(&th, NULL, keytap_thread, (void *)src) != 0) {
+		CFRelease(src);
+		return -1;
+	}
+	pthread_detach(th);
 	return 0;
 }
 

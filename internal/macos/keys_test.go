@@ -145,3 +145,55 @@ func TestTapKeysSkipCarbonRoutedCombos(t *testing.T) {
 		t.Errorf("tap handles %d combos that Carbon delivers", len(tk))
 	}
 }
+
+func TestTapRouterEmptyPassesEverything(t *testing.T) {
+	var r tapRouter
+	if _, run, swallow := r.keyDown(0x04, tOption, false); run || swallow {
+		t.Errorf("router with no bindings swallowed a key")
+	}
+}
+
+func TestTapRouterSetAndMatch(t *testing.T) {
+	var r tapRouter
+	keys, _ := hotkeysFor(binds(t, "Mod-h", "focus left", "Ctrl-Option-l", "focus right"))
+	r.set(keys)
+	if cmd, run, swallow := r.keyDown(0x04, tOption, false); !run || !swallow || cmd != "focus left" {
+		t.Errorf("Option-h: cmd=%q run=%v swallow=%v", cmd, run, swallow)
+	}
+	if _, _, swallow := r.keyDown(0x25, tOption|tControl, false); swallow {
+		t.Errorf("tap swallowed a Carbon-routed combo")
+	}
+	if !r.active() {
+		t.Errorf("router with a tap binding reports inactive")
+	}
+	r.set(nil)
+	if r.active() {
+		t.Errorf("router without tap bindings reports active")
+	}
+}
+
+// The tap runs on its own thread while reload replaces the bindings
+// on the main thread; run with -race.
+func TestTapRouterConcurrent(t *testing.T) {
+	var r tapRouter
+	a, _ := hotkeysFor(binds(t, "Mod-h", "focus left"))
+	b, _ := hotkeysFor(binds(t, "Mod-h", "focus right"))
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 2000; i++ {
+			if cmd, run, _ := r.keyDown(0x04, tOption, false); run && cmd != "focus left" && cmd != "focus right" {
+				t.Errorf("torn read: %q", cmd)
+				return
+			}
+		}
+	}()
+	for i := 0; i < 2000; i++ {
+		if i%2 == 0 {
+			r.set(a)
+		} else {
+			r.set(b)
+		}
+	}
+	<-done
+}

@@ -52,7 +52,7 @@ func (b *Backend) shmBuffer(w, h int32, pixels []byte) (proto.WlBuffer, error) {
 // changed. Called from the render sequence; the decoration commit is
 // synced to render_finish.
 func (b *Backend) renderTitlebar(w *Window, p wm.Placement) {
-	barH := b.cfg.Titlebar.Height
+	barH := b.Cfg.Titlebar.Height
 	if barH <= 0 || !p.Bar || !b.comp.IsSet() {
 		return
 	}

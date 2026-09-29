@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
-	"log"
 	"os"
 	"sync"
 
@@ -25,18 +24,16 @@ import (
 	"wimy/internal/wm"
 )
 
+var (
+	_ backend.Platform = (*Backend)(nil)
+	_ command.Effects  = (*Backend)(nil)
+)
+
 // Backend is the river protocol backend.
 type Backend struct {
 	proto.WlRegistryStub
 	proto.RiverWindowManagerV1Stub
-
-	cfg   *config.Config
-	state *wm.State
-	reg   *command.Registry
-
-	// configArg is the -config flag value as passed at startup;
-	// reload re-runs config.Load with it.
-	configArg string
+	*backend.Core
 
 	conn     *wlcl.Connection
 	registry proto.WlRegistry
@@ -52,7 +49,6 @@ type Backend struct {
 	seats           []*Seat
 	bindings        []*XkbBinding
 	pointerBindings []*PointerBinding
-	autostart       backend.Autostart
 
 	// bindsNeedEnable asks applyManage to (re)enable all seats'
 	// bindings after a config reload recreated them.
@@ -62,7 +58,6 @@ type Backend struct {
 	wlOutputScales map[uint32]int32
 
 	mu     sync.Mutex
-	queue  []string
 	nextID wm.WindowID
 
 	done   bool
@@ -89,18 +84,13 @@ type Backend struct {
 // state may have changed; it must not block.
 func New(cfg *config.Config, configArg string, notify func()) *Backend {
 	b := &Backend{
-		cfg:            cfg,
-		configArg:      configArg,
-		state:          wm.NewState(),
 		wlOutputNames:  make(map[uint32]string),
 		wlOutputScales: make(map[uint32]int32),
 		nextID:         1,
 		notify:         notify,
 	}
-	b.state.StackStrip = cfg.StackStrip
-	b.state.TitlebarHeight = cfg.Titlebar.Height
+	b.Core = backend.NewCore(cfg, configArg, b)
 	b.tbr = newTitlebarRenderer(cfg)
-	b.reg = command.New(&command.Env{State: b.state, Fx: b})
 	return b
 }
 
@@ -109,34 +99,25 @@ func toRGBA(c config.Color) color.RGBA {
 	return color.RGBA{R: uint8(c.R >> 24), G: uint8(c.G >> 24), B: uint8(c.B >> 24), A: uint8(c.A >> 24)}
 }
 
-// State returns the model (only safe to use inside Snapshot or from
-// the dispatch goroutine).
-func (b *Backend) State() *wm.State { return b.state }
-
-// CommandNames returns the registered command names.
-func (b *Backend) CommandNames() []string { return b.reg.Names() }
-
 // Snapshot runs fn with exclusive access to the model: no protocol
 // event is dispatched while fn runs.
 func (b *Backend) Snapshot(fn func(*wm.State)) {
-	b.conn.DoSync(func() { fn(b.state) })
+	b.conn.DoSync(func() { fn(b.State) })
 }
 
-// QueueCommand appends a command string to the pending queue and asks
-// the compositor for a manage sequence, in which the queue is drained.
-// It is safe to call from any goroutine.
-func (b *Backend) QueueCommand(cmd string) {
-	b.mu.Lock()
-	b.queue = append(b.queue, cmd)
-	b.mu.Unlock()
-	if b.conn != nil {
-		b.conn.DoSync(func() {
-			if b.wmg.IsSet() {
-				b.wmg.ManageDirty()
-				_ = b.conn.Flush()
-			}
-		})
+// Wake implements backend.Platform: it asks river for a manage
+// sequence, in which the command queue is drained. It must not be
+// called from the dispatch goroutine.
+func (b *Backend) Wake() {
+	if b.conn == nil {
+		return
 	}
+	b.conn.DoSync(func() {
+		if b.wmg.IsSet() {
+			b.wmg.ManageDirty()
+			_ = b.conn.Flush()
+		}
+	})
 }
 
 // Quit ends the Wayland session (exit_session): the compositor exits
@@ -203,7 +184,7 @@ func (b *Backend) Run(ctx context.Context) (err error) {
 	}
 	b.wmg.SetUserData(b)
 
-	b.runAutostart()
+	b.StartAutostart()
 
 	dctx, cancel := context.WithCancel(ctx)
 	b.cancel = cancel
@@ -338,17 +319,13 @@ func (b *Backend) HandleRiverWindowManagerV1Seat(ctx context.Context, id proto.R
 // createXkbBindings declares the configured key bindings for a seat.
 // They take effect when enabled during a manage sequence.
 func (b *Backend) createXkbBindings(s *Seat) {
-	for _, bind := range b.cfg.Binds {
+	for _, bind := range b.Cfg.Binds {
 		obj := b.xkb.GetXkbBinding(s.Object, bind.Keysym, bind.Mods)
 		xb := &XkbBinding{
-			Object:  obj,
-			Seat:    s,
-			Command: bind.Command,
-			OnPressed: func(cmd string) {
-				b.mu.Lock()
-				b.queue = append(b.queue, cmd)
-				b.mu.Unlock()
-			},
+			Object:    obj,
+			Seat:      s,
+			Command:   bind.Command,
+			OnPressed: b.Enqueue,
 		}
 		obj.SetUserData(xb)
 		b.bindings = append(b.bindings, xb)
@@ -360,7 +337,7 @@ func (b *Backend) createXkbBindings(s *Seat) {
 // sequence.
 func (b *Backend) createPointerBindings(s *Seat) {
 	for _, button := range []uint32{btnLeft, btnRight} {
-		obj := s.Object.GetPointerBinding(button, b.cfg.ModMask)
+		obj := s.Object.GetPointerBinding(button, b.Cfg.ModMask)
 		pb := &PointerBinding{
 			Object: obj,
 			Seat:   s,
@@ -379,7 +356,7 @@ func (b *Backend) createPointerBindings(s *Seat) {
 // propose new window-management state.
 func (b *Backend) HandleRiverWindowManagerV1ManageStart(ctx context.Context) {
 	b.syncModel()
-	b.drainQueue()
+	b.DrainQueue()
 	b.applyManage()
 	b.wmg.ManageFinish()
 	if b.notify != nil {
@@ -400,7 +377,7 @@ func (b *Backend) syncModel() {
 	// outputs
 	for _, o := range b.outputs {
 		if o.Removed {
-			b.state.RemoveOutput(o.NameInModel)
+			b.State.RemoveOutput(o.NameInModel)
 		}
 	}
 	b.outputs = deleteFunc(b.outputs, (*Output).MaybeDestroy)
@@ -408,15 +385,15 @@ func (b *Backend) syncModel() {
 		name := outputName(o)
 		if !o.Added {
 			o.NameInModel = name
-			b.state.AddOutput(name)
+			b.State.AddOutput(name)
 			o.Added = true
 		} else if o.NameInModel != name {
-			b.state.RenameOutput(o.NameInModel, name)
+			b.State.RenameOutput(o.NameInModel, name)
 			o.NameInModel = name
 		}
-		b.state.SetOutputGeometry(o.NameInModel, o.X, o.Y, o.W, o.H)
+		b.State.SetOutputGeometry(o.NameInModel, o.X, o.Y, o.W, o.H)
 		if o.UsableW > 0 {
-			b.state.SetOutputUsable(o.NameInModel, o.UsableX, o.UsableY, o.UsableW, o.UsableH)
+			b.State.SetOutputUsable(o.NameInModel, o.UsableX, o.UsableY, o.UsableW, o.UsableH)
 		}
 	}
 
@@ -424,22 +401,22 @@ func (b *Backend) syncModel() {
 	for _, w := range b.windows {
 		if w.New {
 			w.New = false
-			b.state.AddWindow(w.ID, w.Parent)
+			b.State.AddWindow(w.ID, w.Parent)
 		}
 		if w.Closed {
 			continue
 		}
 		if w.AppID != "" {
-			b.state.SetAppID(w.ID, w.AppID)
+			b.State.SetAppID(w.ID, w.AppID)
 		}
 		if w.Title != "" {
-			b.state.SetTitle(w.ID, w.Title)
+			b.State.SetTitle(w.ID, w.Title)
 		}
 	}
 	kept := b.windows[:0]
 	for _, w := range b.windows {
 		if w.Closed {
-			b.state.RemoveWindow(w.ID)
+			b.State.RemoveWindow(w.ID)
 			w.destroyDeco()
 			w.Node.Destroy()
 			w.Object.Destroy()
@@ -464,32 +441,19 @@ func (b *Backend) syncModel() {
 			// click (window_interaction), else the pointer passing
 			// over the column's strips would flip focus each time.
 			moved := s.PointerX != s.LastX || s.PointerY != s.LastY
-			if b.cfg.FocusFollowsMouse && moved && s.Op == nil && w.ID != b.state.Focused && b.state.Hoverable(w.ID) {
-				b.state.FocusWindow(w.ID)
+			if b.Cfg.FocusFollowsMouse && moved && s.Op == nil && w.ID != b.State.Focused && b.State.Hoverable(w.ID) {
+				b.State.FocusWindow(w.ID)
 			}
 		}
 		s.LastX, s.LastY = s.PointerX, s.PointerY
 		if s.Interacted != nil {
-			b.state.FocusWindow(s.Interacted.ID)
+			b.State.FocusWindow(s.Interacted.ID)
 			s.Interacted = nil
 		}
 	}
 	b.seats = deleteFunc(b.seats, func(s *Seat) bool {
 		return s.MaybeDestroy(b.bindings)
 	})
-}
-
-// drainQueue executes pending commands (key bindings, RPC, prompts).
-func (b *Backend) drainQueue() {
-	b.mu.Lock()
-	queue := b.queue
-	b.queue = nil
-	b.mu.Unlock()
-	for _, cmd := range queue {
-		if err := b.reg.Run(cmd); err != nil {
-			log.Printf("command %q: %v", cmd, err)
-		}
-	}
 }
 
 // applyManage proposes window-management state: focus, dimensions,
@@ -558,7 +522,7 @@ func (b *Backend) applyManage() {
 
 	// keyboard focus: while a layer shell surface holds focus, leave
 	// it alone and dim all window borders
-	focused := b.windowByID(b.state.Focused)
+	focused := b.windowByID(b.State.Focused)
 	for _, s := range b.seats {
 		if b.layerFocus {
 			continue
@@ -577,7 +541,7 @@ func (b *Backend) applyManage() {
 	}
 
 	// dimensions
-	for _, p := range b.state.Layout() {
+	for _, p := range b.State.Layout() {
 		if p.Hidden {
 			continue
 		}
@@ -599,7 +563,7 @@ func (b *Backend) applyManage() {
 
 // applyRender applies rendering state from the layout solver.
 func (b *Backend) applyRender() {
-	for _, p := range b.state.Layout() {
+	for _, p := range b.State.Layout() {
 		w := b.windowByID(p.ID)
 		if w == nil {
 			continue
@@ -659,9 +623,9 @@ func (b *Backend) setBorder(w *Window, focused bool, hasBar bool) {
 	w.FocusSent = focused
 	w.BarSent = hasBar
 	w.BorderSet = true
-	c := b.cfg.Border.Normal
+	c := b.Cfg.Border.Normal
 	if focused {
-		c = b.cfg.Border.Focused
+		c = b.Cfg.Border.Focused
 	}
 	var edges uint32 = proto.RiverWindowV1EdgesTop | proto.RiverWindowV1EdgesBottom |
 		proto.RiverWindowV1EdgesLeft | proto.RiverWindowV1EdgesRight
@@ -669,17 +633,17 @@ func (b *Backend) setBorder(w *Window, focused bool, hasBar bool) {
 		edges = proto.RiverWindowV1EdgesBottom |
 			proto.RiverWindowV1EdgesLeft | proto.RiverWindowV1EdgesRight
 	}
-	w.Object.SetBorders(edges, b.cfg.Border.Width, c.R, c.G, c.B, c.A)
+	w.Object.SetBorders(edges, b.Cfg.Border.Width, c.R, c.G, c.B, c.A)
 }
 
 // outputForWindow returns the river output the window is rendered on.
 func (b *Backend) outputForWindow(w *Window) *Output {
-	win := b.state.Windows[w.ID]
+	win := b.State.Windows[w.ID]
 	if win == nil {
 		return nil
 	}
 	for _, name := range win.TagList() {
-		for i, o := range b.state.Outputs {
+		for i, o := range b.State.Outputs {
 			if o.View == name && i < len(b.outputs) {
 				return b.outputs[i]
 			}
@@ -702,10 +666,10 @@ func (b *Backend) windowByID(id wm.WindowID) *Window {
 
 // activeOutput returns the river output that is active in the model.
 func (b *Backend) activeOutput() *Output {
-	if len(b.state.Outputs) == 0 || b.state.FocusOutput >= len(b.state.Outputs) {
+	if len(b.State.Outputs) == 0 || b.State.FocusOutput >= len(b.State.Outputs) {
 		return nil
 	}
-	name := b.state.Outputs[b.state.FocusOutput].Name
+	name := b.State.Outputs[b.State.FocusOutput].Name
 	for _, o := range b.outputs {
 		if o.NameInModel == name {
 			return o

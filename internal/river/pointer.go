@@ -60,7 +60,7 @@ func (b *Backend) pointerPress(s *Seat, button uint32) {
 	if button == btnRight {
 		btn = backend.ButtonResize
 	}
-	op := backend.StartPointerOp(b.state, w.ID, btn, s.PointerX, s.PointerY)
+	op := backend.StartPointerOp(b.State, w.ID, btn, s.PointerX, s.PointerY)
 	if op == nil {
 		return
 	}
@@ -78,7 +78,7 @@ func (b *Backend) clientMoveRequest(w *Window, seat proto.RiverSeatV1) {
 	if s == nil || s.Op != nil {
 		return
 	}
-	op := backend.ClientMoveOp(b.state, w.ID)
+	op := backend.ClientMoveOp(b.State, w.ID)
 	if op == nil {
 		return
 	}
@@ -92,7 +92,7 @@ func (b *Backend) clientResizeRequest(w *Window, seat proto.RiverSeatV1, edges u
 	if s == nil || s.Op != nil {
 		return
 	}
-	op := backend.ClientResizeOp(b.state, w.ID, edgesFromProto(edges), s.PointerX)
+	op := backend.ClientResizeOp(b.State, w.ID, edgesFromProto(edges), s.PointerX)
 	if op == nil {
 		return
 	}

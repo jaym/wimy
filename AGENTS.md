@@ -45,7 +45,7 @@ go test ./...           # unit tests (wm, backend, config, command, rpc, titleba
 go vet ./...            # must stay clean
 gofmt -l cmd internal   # must print nothing (except gen.go is fine)
 
-./e2e.sh        # 26 checks: core WM flows via wimyctl (headless river)
+./e2e.sh        # 25 checks (+1 skipped as flaky): core WM flows via wimyctl
 ./e2e-multi.sh  #  7 checks: multi-output behavior
 ./e2e-keys.sh   #  6 checks: REAL key events → bindings (virtual keyboard)
 ./e2e-layer.sh  #  5 checks: layer shell (fuzzel survives, focus events)

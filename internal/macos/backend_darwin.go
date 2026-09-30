@@ -79,6 +79,7 @@ type Backend struct {
 
 	// menu bar item and startup state
 	started   bool       // start() ran (Accessibility granted)
+	restarted bool       // took over a restart handoff
 	login     int        // start-at-login status (loginOff, ...)
 	menuTitle string     // what the status item shows, to skip no-op updates
 	menu      []menuItem // current menu; goMenuItem indexes it
@@ -167,6 +168,14 @@ func (b *Backend) checkSecureInput() {
 // be called from the main goroutine.
 func (b *Backend) Run(ctx context.Context) error {
 	C.wimy_app_init()
+	b.store = hiddenStore{path: filepath.Join(stateDir(os.Getenv, homeDir()), "hidden.json")}
+	if tv, err := unix.SysctlTimeval("kern.boottime"); err == nil {
+		b.boot = tv.Sec
+	}
+	// Take a restart handoff over right away: it expires after two
+	// minutes, and an update that lost the Accessibility permission may
+	// wait longer than that for the user to approve it again.
+	b.restarted = b.takeHandoff()
 	if C.wimy_ax_trusted(1) != 0 {
 		b.start()
 	} else {
@@ -197,16 +206,12 @@ func goTrustTick() {
 // start brings wimy up once it may use the Accessibility API.
 func (b *Backend) start() {
 	b.started = true
-	b.store = hiddenStore{path: filepath.Join(stateDir(os.Getenv, homeDir()), "hidden.json")}
-	if tv, err := unix.SysctlTimeval("kern.boottime"); err == nil {
-		b.boot = tv.Sec
-	}
 	if m, err := b.store.load(b.boot); err != nil {
 		log.Printf("hidden-window store %s: %v (ignored)", b.store.path, err)
 	} else {
 		b.restore = m
 	}
-	restarted := b.takeHandoff()
+	restarted := b.restarted
 	b.syncScreens()
 	if restarted {
 		// outputs of the old process that no screen has any more

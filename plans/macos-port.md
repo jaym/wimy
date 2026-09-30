@@ -327,6 +327,23 @@ slow, see the Swift fallback under Risks.
 
 ### Phase 2 — views/tags, focus, multi-output
 
+**Status (2026-09-29): done** (`plans/macos-phase2.md`), live-tested on a
+MacBook Pro (1512×982) plus a BenQ RD280UG (1920×1280) to its right,
+with SketchyBar and `bar-gap 37`:
+- Views hide/show by parking windows in a corner; with the BenQ to the
+  right they park bottom-left. macOS clamped the parked y by 39pt.
+  `wimyctl quit` puts them back; after `kill -9` the next start restores
+  them from `~/.local/state/wimy/hidden.json`.
+- External focus (clicks, Cmd-Tab) flows into the model, and switches
+  to a hidden window's view. Startup focus is the frontmost window.
+- Both screens are outputs; windows open at startup join their screen's
+  view, spread over columns.
+- Deviations: SketchyBar integration (plugin + `bar-gap`) pulled forward
+  from Phase 4; the control socket moved to `/tmp/wimy-<uid>/` (launchd
+  agents have no `TMPDIR`); app hiding (Cmd-H) is undone instead of
+  tracked, at the user's request; minimized windows return to their
+  views.
+
 - Hide/show via the corner (with the safety requirements above).
 - Focus: raise + activate; sync `kAXFocusedWindowChanged` (and app
   activation from Cmd-Tab or Dock clicks) back into the model, so

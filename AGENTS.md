@@ -193,6 +193,23 @@ go generate ./internal/proto
 
 ## macOS backend gotchas (`internal/macos`, learned on macOS 26)
 
+- Hiding windows of other views = parking them in a screen corner
+  (`hidePosition`): 1pt from the right or left edge, at the bottom. macOS
+  clamps the y up (observed 39pt) to keep a strip reachable, so
+  detection (`inHideCorner`) allows up to 64pt. Always record the frame
+  in the store *before* moving (`hide`), and put parked windows back on
+  every exit path (`unhideAll` after the run loop, `guard` on panics in
+  callbacks).
+- One wimy focus request produces two notifications (AX focused-window
+  changed, app activated); `focusEcho` treats all of them within 500ms
+  as echoes, or quick Option-j presses bounce focus back.
+- launchd agents (SketchyBar and its plugins) get neither `TMPDIR` nor a
+  usable `PATH` (unexpanded `$HOME`/`$USER` entries), and nix-darwin
+  agents may lack `HOME`: hence the `/tmp/wimy-<uid>/` socket, and
+  `/usr/bin/jq` in the plugin.
+- App hiding is undone on purpose (`unhide_app`); minimized windows keep
+  their tags (`away`) so they come back to their views.
+
 - Key bindings take two paths (`hotkey.viaTap`): combos with Control or
   Command are Carbon `RegisterEventHotKey` hotkeys; Option/Shift-only
   combos go through a CGEventTap. Carbon silently never delivers

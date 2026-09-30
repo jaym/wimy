@@ -300,9 +300,10 @@ converting sway-style `output … scale …` lines.
 
 ## macOS (work in progress)
 
-A macOS backend is being built (`plans/macos-port.md`). It currently
-tiles the primary screen and runs the key bindings; switching views,
-multiple screens, titlebars and the mouse come later. It needs the
+A macOS backend is being built (`plans/macos-port.md`). It tiles every
+screen, switches views, follows focus changes you make with the mouse
+or Cmd-Tab, and runs the key bindings; titlebars, borders and the
+mouse come later. It needs the
 Accessibility permission (System Settings → Privacy & Security →
 Accessibility) for whatever starts it — for now the terminal you run
 `wimy` from.
@@ -316,6 +317,24 @@ Accessibility) for whatever starts it — for now the terminal you run
   app. With Ghostty this goes through AppleScript, so macOS asks once
   to allow controlling Ghostty. `terminal` and `launcher` run through
   `sh -c`, so they may quote arguments.
+- **Views:** macOS has no way to hide one window of an app, so windows
+  of views that aren't shown are parked in a corner of their screen
+  (bottom-right, or bottom-left when another screen is to the right),
+  with a sliver left on screen. Their last frame is saved in
+  `~/.local/state/wimy/hidden.json` (or `$XDG_STATE_HOME/wimy`) before
+  they move: `wimyctl quit`, Ctrl-C and SIGTERM put them back, and if
+  wimy is killed, the next start does.
+- **Screens:** every screen is an output; windows already open when
+  wimy starts join the view of the screen they are on.
+- **Minimize and hide:** a minimized window leaves the tiling and
+  returns to its views when restored. Hiding apps (Cmd-H, Hide Others)
+  is undone at once — it would leave holes in the tiling.
+- **Bars:** with a bar wimy can't see, such as
+  [SketchyBar](contrib/macos/sketchybar/), set `bar-gap` to its height
+  (points reserved at the top of every screen). The SketchyBar plugin
+  shows the views and the column mode like the waybar modules.
+- **Control socket:** `/tmp/wimy-<uid>/wimy.sock`, a private per-user
+  directory, so bars started by launchd (which get no `TMPDIR`) find it.
 
 ### Known shortcomings of key bindings on macOS
 

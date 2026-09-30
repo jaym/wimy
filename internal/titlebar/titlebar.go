@@ -41,6 +41,11 @@ var fontCandidates = []string{
 	"/usr/share/fonts/noto/NotoSans-Regular.ttf",          // Arch noto
 	"/usr/share/fonts/noto-sans/NotoSans-Regular.ttf",     // Fedora noto
 	"/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", // Debian noto
+	// macOS: SF (the system UI font) parses with x/image/opentype; the
+	// .ttc collections (Helvetica) don't.
+	"/System/Library/Fonts/SFNS.ttf",
+	"/System/Library/Fonts/Supplemental/Arial.ttf",
+	"/Library/Fonts/Arial Unicode.ttf",
 }
 
 // New returns a Renderer. A sans-serif system font is used if found,

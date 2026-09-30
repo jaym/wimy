@@ -2,6 +2,7 @@ package titlebar
 
 import (
 	"image/color"
+	"runtime"
 	"testing"
 )
 
@@ -65,5 +66,14 @@ func TestRenderZeroWidth(t *testing.T) {
 	px := r.Render(0, 1, "x", true)
 	if len(px) != 22*4 {
 		t.Fatalf("len: %d", len(px))
+	}
+}
+
+func TestSystemFontOnMacOS(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS font paths")
+	}
+	if r := testRenderer(); r.fontData == nil {
+		t.Errorf("no system font found: titlebars would use the bitmap fallback")
 	}
 }

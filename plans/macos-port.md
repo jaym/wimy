@@ -376,6 +376,18 @@ tiling; a model-level `fullscreen` toggle (Mod-f, both OSes) was added.
 - Titlebars stay unconditional, as on Linux: stack mode depends on them.
   Document the double titlebar (native + wimy).
 
+### Phase 4a — app bundle, signing, restart, menu bar (done 2026-09-30)
+
+`plans/macos-phase4a.md`. Live-tested: `make mac-install` builds,
+signs with the self-signed `wimy-dev` identity and installs
+`~/Applications/Wimy.app`; an update (different binary) restarted wimy
+in place — same pid, identical state — without losing the
+Accessibility permission. Menu bar item, permission wait and
+SMAppService login item work. Bundle id `io.github.jaym.wimy`
+(answers the open question). Nix (4c) will sign the installed copy at
+install time through the same install step (home-manager activation
+runs as the user, who owns the keychain).
+
 ### Phase 4 — mouse, contrib, docs
 
 - Mod-drag move/resize and the grow binding via the mouse event tap,

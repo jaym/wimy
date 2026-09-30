@@ -200,6 +200,20 @@ go generate ./internal/proto
   in the store *before* moving (`hide`), and put parked windows back on
   every exit path (`unhideAll` after the run loop, `guard` on panics in
   callbacks).
+- **Signing is what keeps updates painless.** TCC keys the
+  Accessibility grant on the designated requirement; ad-hoc signatures
+  are the binary's hash, so every changed build loses the grant. Builds
+  are signed with the self-signed `wimy-dev` identity (`make
+  mac-signing-identity`), giving `identifier "io.github.jaym.wimy" and
+  certificate leaf = H"…"` for every build. Nix builds can't reach the
+  keychain: sign the *installed copy* at install time (Phase 4c).
+- Restart (`wimyctl restart`, `make mac-install`) = handoff + `exec` of
+  the executable on disk: the model is plain JSON (all `wm.State`
+  fields are exported — keep it that way), window ids (CGWindowIDs)
+  survive, autostart children stay children of the same pid and are
+  adopted. The handoff is read before the permission wait (it expires
+  after 2 min). river ids don't survive, so restart is macOS-only.
+- kdl-go parses KDL **v1**: booleans are `true`/`false`, not `#true`.
 - Decorations are one borderless, non-activating NSPanel per window,
   ordered directly *behind* it with `orderWindow:NSWindowBelow
   relativeTo:<CGWindowID>` (works for other apps' windows — verified by

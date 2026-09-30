@@ -300,7 +300,26 @@ converting sway-style `output … scale …` lines.
 
 ## macOS (work in progress)
 
-A macOS backend is being built (`plans/macos-port.md`). It tiles every
+A macOS backend is being built (`plans/macos-port.md`).
+
+**Install and update:**
+
+```sh
+make mac-signing-identity   # once: a self-signed code-signing certificate
+make mac-install            # build, sign and install ~/Applications/Wimy.app
+```
+
+`make mac-install` puts `wimyctl` in `~/.local/bin` and starts Wimy, or,
+if it is running, restarts it in place with the new version: views,
+tags, columns, floating windows and parked windows all carry over
+(`wimyctl restart` does the same by hand; `wimyctl version` shows what
+runs). Signing with the same identity every time keeps the Accessibility
+permission across updates — with ad-hoc signing macOS forgets it for
+every changed build. Wimy lives in the menu bar (view name; views,
+reload, restart, quit) and registers itself as a login item
+(`start-at-login false` to turn that off; `status-item false` hides the
+menu bar item). It logs to `~/Library/Logs/wimy.log`.
+ It tiles every
 screen, switches views, follows focus changes you make with the mouse
 or Cmd-Tab, draws wimy's titlebars and borders, and runs the key
 bindings; the mouse (drags) comes later. It needs the

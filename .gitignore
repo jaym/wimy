@@ -11,3 +11,7 @@ devenv.local.yaml
 
 # build output
 bin/
+
+# nix build output
+result
+result-*

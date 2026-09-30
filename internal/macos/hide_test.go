@@ -49,3 +49,13 @@ func TestInHideCorner(t *testing.T) {
 		t.Errorf("ordinary window taken for hidden")
 	}
 }
+
+func TestCenteredIn(t *testing.T) {
+	area := wm.Rect{X: 0, Y: 37, W: 1512, H: 945}
+	if got, want := centeredIn(area, 800, 600), (wm.Rect{X: 356, Y: 209, W: 800, H: 600}); got != want {
+		t.Errorf("centeredIn = %+v, want %+v", got, want)
+	}
+	if got := centeredIn(area, 3000, 2000); got != area {
+		t.Errorf("oversized window = %+v, want the whole area %+v", got, area)
+	}
+}

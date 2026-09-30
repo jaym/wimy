@@ -91,7 +91,50 @@ static const char *bundle_of(pid_t pid) {
 	return app.bundleIdentifier.UTF8String ?: "";
 }
 
-static void track_window(pid_t pid, AXUIElementRef win, AXObserverRef obs) {
+// report_window tells Go about tracked window i (new, deminiaturized,
+// or its app unhidden). minimized overrides the AX attribute when set.
+static void report_window(int i, int minimized) {
+	AXUIElementRef win = wins[i].el;
+	char *title = copy_str(win, kAXTitleAttribute);
+	char *subrole = copy_str(win, kAXSubroleAttribute);
+	goWindowAdded(wins[i].wid, wins[i].pid, (char *)bundle_of(wins[i].pid), title, subrole, zoom_enabled(win),
+	              minimized || bool_attr(win, kAXMinimizedAttribute));
+	free(title);
+	free(subrole);
+}
+
+// window_notes are the per-window AX notifications wimy observes.
+static CFStringRef window_notes(int k) {
+	switch (k) {
+	case 0: return kAXUIElementDestroyedNotification;
+	case 1: return kAXTitleChangedNotification;
+	case 2: return kAXWindowMiniaturizedNotification;
+	default: return kAXWindowDeminiaturizedNotification;
+	}
+}
+
+// register_window_notes adds the per-window notifications. A window
+// that isn't ready yet refuses them; retry the missing ones once after
+// 500ms, else a window whose "destroyed" notification never registered
+// would stay in the layout after it closes.
+static void register_window_notes(uint32_t wid, int retry) {
+	int i = find_win(wid), a = i >= 0 ? find_app(wins[i].pid) : -1;
+	if (a < 0) return;
+	int failed = 0;
+	for (int k = 0; k < 4; k++) {
+		AXError err = AXObserverAddNotification(apps[a].obs, wins[i].el, window_notes(k), NULL);
+		if (err != kAXErrorSuccess && err != kAXErrorNotificationAlreadyRegistered) failed = 1;
+	}
+	if (failed && retry) {
+		dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 500 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+			register_window_notes(wid, 0);
+		});
+	} else if (failed) {
+		NSLog(@"wimy: window %u refused AX notifications; it may linger after closing", wid);
+	}
+}
+
+static void track_window(pid_t pid, AXUIElementRef win) {
 	CGWindowID wid = 0;
 	if (_AXUIElementGetWindow(win, &wid) != kAXErrorSuccess || wid == 0) return;
 	if (find_win(wid) >= 0) return;
@@ -105,15 +148,10 @@ static void track_window(pid_t pid, AXUIElementRef win, AXObserverRef obs) {
 		wins = realloc(wins, capwins * sizeof *wins);
 	}
 	wins[nwins++] = (tracked_win){wid, pid, (AXUIElementRef)CFRetain(win)};
-	AXObserverAddNotification(obs, win, kAXUIElementDestroyedNotification, NULL);
-	AXObserverAddNotification(obs, win, kAXTitleChangedNotification, NULL);
-
-	char *title = copy_str(win, kAXTitleAttribute);
-	char *subrole = copy_str(win, kAXSubroleAttribute);
-	goWindowAdded(wid, pid, (char *)bundle_of(pid), title, subrole,
-	              zoom_enabled(win), bool_attr(win, kAXMinimizedAttribute));
-	free(title);
-	free(subrole);
+	register_window_notes(wid, 1);
+	int i = find_win(wid);
+	NSRunningApplication *app = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
+	report_window(i, app.hidden);
 }
 
 static void untrack_at(int i) {
@@ -127,7 +165,16 @@ static void observer_cb(AXObserverRef obs, AXUIElementRef el, CFStringRef note, 
 	if (CFEqual(note, kAXWindowCreatedNotification)) {
 		pid_t pid = 0;
 		AXUIElementGetPid(el, &pid);
-		track_window(pid, el, obs);
+		track_window(pid, el);
+	} else if (CFEqual(note, kAXFocusedWindowChangedNotification)) {
+		int i = find_el(el);
+		if (i >= 0) goFocusChanged(wins[i].wid);
+	} else if (CFEqual(note, kAXWindowMiniaturizedNotification)) {
+		int i = find_el(el);
+		if (i >= 0) goWindowGone(wins[i].wid);
+	} else if (CFEqual(note, kAXWindowDeminiaturizedNotification)) {
+		int i = find_el(el);
+		if (i >= 0) report_window(i, 0);
 	} else if (CFEqual(note, kAXUIElementDestroyedNotification)) {
 		int i = find_el(el);
 		if (i >= 0) untrack_at(i);
@@ -142,8 +189,9 @@ static void observer_cb(AXObserverRef obs, AXUIElementRef el, CFStringRef note, 
 }
 
 // watch_pid observes a regular app's windows. A freshly launched app
-// often isn't ready for AX yet; retry a few times.
-static void watch_pid(pid_t pid, int attempts) {
+// often isn't ready for AX yet; retry with a doubling delay (250ms up
+// to 2s, ~20s in total). App activation re-watches too.
+static void watch_pid(pid_t pid, int attempts, int64_t delay_ms) {
 	if (pid == getpid() || find_app(pid) >= 0) return;
 	AXUIElementRef app = AXUIElementCreateApplication(pid);
 	AXUIElementSetMessagingTimeout(app, 1.0);
@@ -156,12 +204,13 @@ static void watch_pid(pid_t pid, int attempts) {
 		CFRelease(obs);
 		CFRelease(app);
 		if (attempts > 0) {
-			dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 500 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
-				watch_pid(pid, attempts - 1);
+			dispatch_after(dispatch_time(DISPATCH_TIME_NOW, delay_ms * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+				watch_pid(pid, attempts - 1, delay_ms * 2 > 2000 ? 2000 : delay_ms * 2);
 			});
 		}
 		return;
 	}
+	AXObserverAddNotification(obs, app, kAXFocusedWindowChangedNotification, NULL);
 	CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), kCFRunLoopDefaultMode);
 	if (napps == capapps) {
 		capapps = capapps ? capapps * 2 : 32;
@@ -172,14 +221,14 @@ static void watch_pid(pid_t pid, int attempts) {
 	CFArrayRef list = NULL;
 	if (AXUIElementCopyAttributeValue(app, kAXWindowsAttribute, (CFTypeRef *)&list) == kAXErrorSuccess && list) {
 		for (CFIndex i = 0; i < CFArrayGetCount(list); i++)
-			track_window(pid, (AXUIElementRef)CFArrayGetValueAtIndex(list, i), obs);
+			track_window(pid, (AXUIElementRef)CFArrayGetValueAtIndex(list, i));
 		CFRelease(list);
 	}
 }
 
 static void watch_app(NSRunningApplication *app) {
 	if (app.activationPolicy != NSApplicationActivationPolicyRegular) return;
-	watch_pid(app.processIdentifier, 5);
+	watch_pid(app.processIdentifier, 12, 250);
 }
 
 static void unwatch_pid(pid_t pid) {
@@ -198,12 +247,17 @@ int wimy_ax_trusted(int prompt) {
 	return AXIsProcessTrustedWithOptions((__bridge CFDictionaryRef)opts);
 }
 
+// Entry points called from Go before [NSApp run] wrap their bodies in
+// @autoreleasepool: there is no run loop pool yet.
+
 void wimy_app_init(void) {
-	[NSApplication sharedApplication];
-	[NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
-	AXUIElementRef sys = AXUIElementCreateSystemWide();
-	AXUIElementSetMessagingTimeout(sys, 1.0);
-	CFRelease(sys);
+	@autoreleasepool {
+		[NSApplication sharedApplication];
+		[NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
+		AXUIElementRef sys = AXUIElementCreateSystemWide();
+		AXUIElementSetMessagingTimeout(sys, 1.0);
+		CFRelease(sys);
+	}
 }
 
 void wimy_app_run(void) { [NSApp run]; }
@@ -241,8 +295,55 @@ void wimy_schedule_apply_after(int ms) {
 	});
 }
 
+// focused_wid returns the tracked window an app has focused, or 0.
+static uint32_t focused_wid(pid_t pid) {
+	AXUIElementRef app = AXUIElementCreateApplication(pid);
+	AXUIElementSetMessagingTimeout(app, 1.0);
+	CFTypeRef win = NULL;
+	CGWindowID wid = 0;
+	if (AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute, &win) == kAXErrorSuccess && win)
+		_AXUIElementGetWindow((AXUIElementRef)win, &wid);
+	if (win) CFRelease(win);
+	CFRelease(app);
+	return (wid && find_win(wid) >= 0) ? wid : 0;
+}
+
+uint32_t wimy_focused_window(void) {
+	@autoreleasepool {
+		NSRunningApplication *app = [[NSWorkspace sharedWorkspace] frontmostApplication];
+		return app ? focused_wid(app.processIdentifier) : 0;
+	}
+}
+
+// set_app_hidden reports an app's windows gone (Cmd-H) or back.
+static void set_app_hidden(pid_t pid, int hidden) {
+	for (int i = nwins - 1; i >= 0; i--) {
+		if (wins[i].pid != pid) continue;
+		if (hidden)
+			goWindowGone(wins[i].wid);
+		else
+			report_window(i, 0);
+	}
+}
+
 void wimy_start_tracking(void) {
+	@autoreleasepool {
 	NSNotificationCenter *wc = [[NSWorkspace sharedWorkspace] notificationCenter];
+	[wc addObserverForName:NSWorkspaceDidActivateApplicationNotification object:nil queue:[NSOperationQueue mainQueue]
+	            usingBlock:^(NSNotification *n) {
+		            NSRunningApplication *app = n.userInfo[NSWorkspaceApplicationKey];
+		            watch_app(app);
+		            uint32_t wid = focused_wid(app.processIdentifier);
+		            if (wid) goFocusChanged(wid);
+	            }];
+	[wc addObserverForName:NSWorkspaceDidHideApplicationNotification object:nil queue:[NSOperationQueue mainQueue]
+	            usingBlock:^(NSNotification *n) {
+		            set_app_hidden(((NSRunningApplication *)n.userInfo[NSWorkspaceApplicationKey]).processIdentifier, 1);
+	            }];
+	[wc addObserverForName:NSWorkspaceDidUnhideApplicationNotification object:nil queue:[NSOperationQueue mainQueue]
+	            usingBlock:^(NSNotification *n) {
+		            set_app_hidden(((NSRunningApplication *)n.userInfo[NSWorkspaceApplicationKey]).processIdentifier, 0);
+	            }];
 	[wc addObserverForName:NSWorkspaceDidLaunchApplicationNotification object:nil queue:[NSOperationQueue mainQueue]
 	            usingBlock:^(NSNotification *n) {
 		            watch_app(n.userInfo[NSWorkspaceApplicationKey]);
@@ -260,6 +361,18 @@ void wimy_start_tracking(void) {
 	                                              }];
 	for (NSRunningApplication *app in [[NSWorkspace sharedWorkspace] runningApplications])
 		watch_app(app);
+	}
+}
+
+void wimy_start_secure_input_poll(void) {
+	dispatch_source_t t = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
+	dispatch_source_set_timer(t, dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), 2 * NSEC_PER_SEC, NSEC_PER_SEC / 4);
+	dispatch_source_set_event_handler(t, ^{
+		goSecureInputTick();
+	});
+	dispatch_resume(t);
+	static dispatch_source_t keep; // the timer lives as long as wimy
+	keep = t;
 }
 
 static CGEventRef keytap_cb(CGEventTapProxy proxy, CGEventType type, CGEventRef ev, void *ctx) {
@@ -349,18 +462,20 @@ void wimy_hotkeys_clear(void) {
 }
 
 int wimy_screens(wimy_screen *out, int max) {
-	NSArray<NSScreen *> *screens = [NSScreen screens];
-	int n = 0;
-	for (NSScreen *s in screens) {
-		if (n == max) break;
-		NSRect f = s.frame, v = s.visibleFrame;
-		out[n].frame = (wimy_rect){f.origin.x, f.origin.y, f.size.width, f.size.height};
-		out[n].visible = (wimy_rect){v.origin.x, v.origin.y, v.size.width, v.size.height};
-		out[n].display = [s.deviceDescription[@"NSScreenNumber"] unsignedIntValue];
-		strlcpy(out[n].name, s.localizedName.UTF8String ?: "", sizeof out[n].name);
-		n++;
+	@autoreleasepool {
+		NSArray<NSScreen *> *screens = [NSScreen screens];
+		int n = 0;
+		for (NSScreen *s in screens) {
+			if (n == max) break;
+			NSRect f = s.frame, v = s.visibleFrame;
+			out[n].frame = (wimy_rect){f.origin.x, f.origin.y, f.size.width, f.size.height};
+			out[n].visible = (wimy_rect){v.origin.x, v.origin.y, v.size.width, v.size.height};
+			out[n].display = [s.deviceDescription[@"NSScreenNumber"] unsignedIntValue];
+			strlcpy(out[n].name, s.localizedName.UTF8String ?: "", sizeof out[n].name);
+			n++;
+		}
+		return n;
 	}
-	return n;
 }
 
 int wimy_window_frame(uint32_t wid, wimy_rect *out) {
@@ -403,6 +518,16 @@ int wimy_window_set_frame(uint32_t wid, double x, double y, double w, double h, 
 	*perr_out = perr;
 	*serr_out = serr;
 	return (perr == kAXErrorSuccess && serr == kAXErrorSuccess) ? 0 : -1;
+}
+
+int wimy_window_set_position(uint32_t wid, double x, double y) {
+	int i = find_win(wid);
+	if (i < 0) return -1;
+	CGPoint p = {x, y};
+	AXValueRef pv = AXValueCreate(kAXValueCGPointType, &p);
+	AXError err = AXUIElementSetAttributeValue(wins[i].el, kAXPositionAttribute, pv);
+	CFRelease(pv);
+	return err == kAXErrorSuccess ? 0 : (int)err;
 }
 
 void wimy_window_focus(uint32_t wid) {

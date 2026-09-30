@@ -30,14 +30,16 @@ func TestFocusEchoExpires(t *testing.T) {
 	}
 }
 
-func TestFocusEchoConsumed(t *testing.T) {
+func TestFocusEchoAbsorbsBothNotifications(t *testing.T) {
+	// one focus request yields an AX focused-window notification and an
+	// app-activation notification; both are echoes
 	var e focusEcho
 	t0 := time.Unix(1000, 0)
 	e.sent(1, t0)
-	if !e.isEcho(1, t0.Add(10*time.Millisecond)) {
-		t.Fatal("first echo not recognized")
-	}
-	if e.isEcho(1, t0.Add(20*time.Millisecond)) {
-		t.Errorf("second notification for the same focus still treated as echo (a real click right after is lost)")
+	e.sent(2, t0.Add(50*time.Millisecond))
+	for _, dt := range []time.Duration{100, 150} {
+		if !e.isEcho(1, t0.Add(dt*time.Millisecond)) {
+			t.Errorf("notification for window 1 at +%dms not treated as echo", dt)
+		}
 	}
 }

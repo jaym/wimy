@@ -54,3 +54,11 @@ func inHideCorner(screens []wm.Rect, r wm.Rect) bool {
 	}
 	return false
 }
+
+// centeredIn returns a w×h rect centred in area, shrunk to fit: where
+// a window found stranded in a hide corner (and not in the store) is
+// put back.
+func centeredIn(area wm.Rect, w, h int32) wm.Rect {
+	w, h = min(w, area.W), min(h, area.H)
+	return wm.Rect{X: area.X + (area.W-w)/2, Y: area.Y + (area.H-h)/2, W: w, H: h}
+}

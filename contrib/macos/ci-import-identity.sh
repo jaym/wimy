@@ -32,8 +32,13 @@ security unlock-keychain -p "$kcpass" "$keychain"
 security import "$p12" -k "$keychain" -P "$WIMY_SIGNING_P12_PASSWORD" -T /usr/bin/codesign
 # let codesign use the key without a GUI prompt
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$kcpass" "$keychain" >/dev/null
-# search the new keychain too
-security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+# search the new keychain too (keeping the others; paths may hold spaces)
+existing=()
+while IFS= read -r k; do
+	k=${k#*\"}
+	existing+=("${k%\"*}")
+done < <(security list-keychains -d user)
+security list-keychains -d user -s "$keychain" "${existing[@]}"
 
 # the certificate is self-signed: trust it for code signing, or
 # find-identity doesn't list it as valid (the runner has passwordless sudo)

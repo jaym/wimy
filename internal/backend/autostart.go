@@ -2,6 +2,7 @@ package backend
 
 import (
 	"log"
+	"os"
 	"os/exec"
 	"sync/atomic"
 	"syscall"
@@ -27,7 +28,7 @@ type Autostart struct {
 // (instead of exec) don't leak children when wimy kills the group.
 type autostartProc struct {
 	cmdline string
-	cmd     *exec.Cmd
+	pid     int
 	pgid    int
 	dead    atomic.Bool
 	done    chan struct{} // closed by the reaping goroutine
@@ -50,7 +51,7 @@ func (a *Autostart) Start(cmdline string) {
 	}
 	p := &autostartProc{
 		cmdline: cmdline,
-		cmd:     cmd,
+		pid:     cmd.Process.Pid,
 		pgid:    cmd.Process.Pid, // Setpgid: pgid == pid
 		done:    make(chan struct{}),
 	}
@@ -59,11 +60,46 @@ func (a *Autostart) Start(cmdline string) {
 		p.dead.Store(true)
 		close(p.done)
 	}()
+	a.track(p)
+	log.Printf("autostart: started %q (pid %d)", cmdline, p.pid)
+}
+
+func (a *Autostart) track(p *autostartProc) {
 	if a.procs == nil {
 		a.procs = make(map[string][]*autostartProc)
 	}
-	a.procs[cmdline] = append(a.procs[cmdline], p)
-	log.Printf("autostart: started %q (pid %d)", cmdline, cmd.Process.Pid)
+	a.procs[p.cmdline] = append(a.procs[p.cmdline], p)
+}
+
+// Adopt takes over an autostart process started by the wimy this one
+// replaced (a restart execs in place, so it is still our child): it is
+// tracked, reaped and reconciled like one started here.
+func (a *Autostart) Adopt(cmdline string, pid int) {
+	p := &autostartProc{cmdline: cmdline, pid: pid, pgid: pid, done: make(chan struct{})}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return
+	}
+	go func() {
+		_, _ = proc.Wait()
+		p.dead.Store(true)
+		close(p.done)
+	}()
+	a.track(p)
+}
+
+// Pids returns the live autostart processes by command line, for the
+// restart handoff.
+func (a *Autostart) Pids() map[string][]int {
+	out := make(map[string][]int)
+	for cmdline, procs := range a.procs {
+		for _, p := range procs {
+			if !p.dead.Load() {
+				out[cmdline] = append(out[cmdline], p.pid)
+			}
+		}
+	}
+	return out
 }
 
 // take removes and returns one tracked process for cmdline,
@@ -96,7 +132,7 @@ func terminate(p *autostartProc) {
 		log.Printf("config reload: autostart %q already exited; nothing to kill", p.cmdline)
 		return
 	}
-	log.Printf("config reload: terminating autostart %q (pid %d)", p.cmdline, p.cmd.Process.Pid)
+	log.Printf("config reload: terminating autostart %q (pid %d)", p.cmdline, p.pid)
 	if err := syscall.Kill(-p.pgid, syscall.SIGTERM); err != nil {
 		log.Printf("autostart %q: SIGTERM: %v", p.cmdline, err)
 	}

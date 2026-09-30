@@ -2,6 +2,7 @@ package backend
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -93,4 +94,24 @@ func TestAutostartKillsWholeProcessGroup(t *testing.T) {
 	waitFor(t, "forked child to die", func() bool {
 		return syscall.Kill(child, 0) != nil
 	})
+}
+
+func TestAutostartAdopt(t *testing.T) {
+	// a restart execs in place: the autostart children stay children of
+	// the same pid, and the successor takes them over
+	cmd := exec.Command("sleep", "30")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	var a Autostart
+	a.Adopt("sleep 30", cmd.Process.Pid)
+	if got := a.Pids()["sleep 30"]; len(got) != 1 || got[0] != cmd.Process.Pid {
+		t.Fatalf("Pids = %v", a.Pids())
+	}
+	killed, _, _ := a.Sync([]string{"sleep 30"}, nil)
+	if killed != 1 {
+		t.Fatalf("killed = %d", killed)
+	}
+	waitFor(t, "adopted child to die", func() bool { return syscall.Kill(cmd.Process.Pid, 0) != nil })
 }

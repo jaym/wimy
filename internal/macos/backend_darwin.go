@@ -173,11 +173,26 @@ func (b *Backend) Run(ctx context.Context) error {
 	} else {
 		b.restore = m
 	}
+	restarted := b.takeHandoff()
 	b.syncScreens()
+	if restarted {
+		// outputs of the old process that no screen has any more
+		for _, name := range b.staleOutputs() {
+			b.State.RemoveOutput(name)
+		}
+	}
 	b.rebind()
 	b.startup = true
 	C.wimy_start_tracking()
 	b.startup = false
+	if restarted {
+		// windows that closed while wimy restarted
+		for _, id := range b.PruneWindows(func(id wm.WindowID) bool { return b.known[id] }) {
+			delete(b.hidden, id)
+			delete(b.parked, id)
+			delete(b.lastShown, id)
+		}
+	}
 	// windows a previous wimy parked that aren't open now: forget them
 	// (apps that come up later and left a window in a corner are still
 	// caught by inHideCorner)
@@ -185,21 +200,25 @@ func (b *Backend) Run(ctx context.Context) error {
 		clear(b.restore)
 		b.saveHidden()
 	}
-	// the windows already open would otherwise all stack in one
-	// column per view (new windows join the focused column, as in wmii)
-	for _, o := range b.outputs {
-		if v := b.viewOn(o.Name); v != "" {
-			b.State.SpreadColumns(v, spreadColumnCount(o.Usable.W))
+	if !restarted {
+		// the windows already open would otherwise all stack in one
+		// column per view (new windows join the focused column, as in wmii)
+		for _, o := range b.outputs {
+			if v := b.viewOn(o.Name); v != "" {
+				b.State.SpreadColumns(v, spreadColumnCount(o.Usable.W))
+			}
 		}
-	}
-	// start with the window the user had in front, not whichever
-	// window was reported last
-	if id := wm.WindowID(C.wimy_focused_window()); b.known[id] {
-		b.State.FocusWindow(id)
+		// start with the window the user had in front, not whichever
+		// window was reported last
+		if id := wm.WindowID(C.wimy_focused_window()); b.known[id] {
+			b.State.FocusWindow(id)
+		}
 	}
 	b.lastFocus = b.State.Focused
 	C.wimy_start_secure_input_poll()
-	b.StartAutostart()
+	if !restarted {
+		b.StartAutostart() // after a restart the old children were adopted
+	}
 	b.markDirty()
 	C.wimy_app_run()
 	// Quit, Shutdown (SIGINT/SIGTERM): never leave windows parked
@@ -529,6 +548,21 @@ func (b *Backend) syncScreens() {
 	b.outputs = outs
 }
 
+// staleOutputs returns model outputs no current screen has.
+func (b *Backend) staleOutputs() []string {
+	have := make(map[string]bool, len(b.outputs))
+	for _, o := range b.outputs {
+		have[o.Name] = true
+	}
+	var out []string
+	for _, o := range b.State.Outputs {
+		if !have[o.Name] {
+			out = append(out, o.Name)
+		}
+	}
+	return out
+}
+
 // screenRects returns the screens' full frames, in NSScreen order.
 func (b *Backend) screenRects() []wm.Rect {
 	rs := make([]wm.Rect, len(b.outputs))
@@ -665,6 +699,14 @@ func (b *Backend) windowAdded(id wm.WindowID, bundle, title, subrole string, has
 		return
 	}
 	b.known[id] = true
+	if b.State.Windows[id] != nil {
+		// taken over from the wimy this one replaced: keep its place
+		// (and leave a parked window parked)
+		b.State.SetAppID(id, bundle)
+		b.State.SetTitle(id, title)
+		b.markDirty()
+		return
+	}
 	cur, ok := b.frame(id)
 	if r, pending := b.restore[id]; pending {
 		r = onScreen(b.outputs, r)
@@ -850,3 +892,6 @@ func goKeyDown(code C.uint16_t, flags C.uint64_t, repeat C.int) C.int {
 	}
 	return 0
 }
+
+// timeNow is time.Now, a variable so the handoff clock is explicit.
+var timeNow = time.Now

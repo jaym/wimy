@@ -59,6 +59,10 @@ type Backend struct {
 	restore   map[wm.WindowID]wm.Rect
 	lastShown map[wm.WindowID]wm.Rect
 	store     hiddenStore
+
+	// away remembers the views (tags) of minimized windows, so a
+	// restored window returns to them instead of the focused view.
+	away map[wm.WindowID][]string
 }
 
 var (
@@ -74,6 +78,7 @@ func New(cfg *config.Config, configArg string, notify func()) *Backend {
 		hidden:    make(map[wm.WindowID]wm.Rect),
 		restore:   make(map[wm.WindowID]wm.Rect),
 		lastShown: make(map[wm.WindowID]wm.Rect),
+		away:      make(map[wm.WindowID][]string),
 		notify:    notify,
 	}
 	b.Core = backend.NewCore(cfg, configArg, b)
@@ -512,8 +517,8 @@ func goWindowAdded(wid C.uint32_t, pid C.int, bundle, title, subrole *C.char, ha
 }
 
 // windowAdded brings a window into the model: a new one, one that was
-// open at startup, or one back from being minimized or its app hidden.
-// Minimized windows stay out until they are restored.
+// open at startup, or one back from being minimized (to the views it
+// was on). Minimized windows stay out until they are restored.
 func (b *Backend) windowAdded(id wm.WindowID, bundle, title, subrole string, hasZoom, minimized bool) {
 	if minimized || b.known[id] {
 		return
@@ -532,8 +537,9 @@ func (b *Backend) windowAdded(id wm.WindowID, bundle, title, subrole string, has
 		cur = r
 		log.Printf("window %d: found in a hide corner, moved on screen", id)
 	}
-	var tags []string
-	if b.startup && ok && len(b.outputs) > 0 {
+	tags := b.away[id]
+	delete(b.away, id)
+	if tags == nil && b.startup && ok && len(b.outputs) > 0 {
 		// already open: join the view of the screen it is on
 		if v := b.viewOn(b.outputs[outputAt(b.outputs, cur)].Name); v != "" {
 			tags = []string{v}
@@ -550,14 +556,19 @@ func (b *Backend) windowAdded(id wm.WindowID, bundle, title, subrole string, has
 	b.markDirty()
 }
 
-// dropWindow takes a window out of the model. A parked window that
-// still exists (minimized, app hidden) is put back first, so it isn't
-// stranded in the corner.
+// dropWindow takes a window out of the model. A window that still
+// exists (minimized) remembers its views, and if it was parked it is
+// put back first, so it isn't stranded in the corner.
 func (b *Backend) dropWindow(id wm.WindowID, exists bool) {
 	if !b.known[id] {
 		return
 	}
 	delete(b.known, id)
+	if w := b.State.Windows[id]; w != nil && exists {
+		b.away[id] = w.TagList()
+	} else {
+		delete(b.away, id)
+	}
 	if r, parked := b.hidden[id]; parked {
 		if exists {
 			b.setFrame(id, r)
@@ -578,7 +589,7 @@ func goWindowRemoved(wid C.uint32_t) {
 }
 
 // goWindowGone: the window still exists but leaves the tiling
-// (minimized, or its app hidden with Cmd-H).
+// (minimized).
 //
 //export goWindowGone
 func goWindowGone(wid C.uint32_t) {

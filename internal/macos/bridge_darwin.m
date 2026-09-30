@@ -149,9 +149,7 @@ static void track_window(pid_t pid, AXUIElementRef win) {
 	}
 	wins[nwins++] = (tracked_win){wid, pid, (AXUIElementRef)CFRetain(win)};
 	register_window_notes(wid, 1);
-	int i = find_win(wid);
-	NSRunningApplication *app = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
-	report_window(i, app.hidden);
+	report_window(find_win(wid), 0);
 }
 
 static void untrack_at(int i) {
@@ -226,8 +224,16 @@ static void watch_pid(pid_t pid, int attempts, int64_t delay_ms) {
 	}
 }
 
+// App hiding (Cmd-H, Hide Others) is undone at once: a hidden app's
+// windows would leave holes in the tiling, or come back in the wrong
+// place. Tiling users hardly ever hide apps on purpose.
+static void unhide_app(NSRunningApplication *app) {
+	if (app.hidden && app.activationPolicy == NSApplicationActivationPolicyRegular) [app unhide];
+}
+
 static void watch_app(NSRunningApplication *app) {
 	if (app.activationPolicy != NSApplicationActivationPolicyRegular) return;
+	unhide_app(app);
 	watch_pid(app.processIdentifier, 12, 250);
 }
 
@@ -315,17 +321,6 @@ uint32_t wimy_focused_window(void) {
 	}
 }
 
-// set_app_hidden reports an app's windows gone (Cmd-H) or back.
-static void set_app_hidden(pid_t pid, int hidden) {
-	for (int i = nwins - 1; i >= 0; i--) {
-		if (wins[i].pid != pid) continue;
-		if (hidden)
-			goWindowGone(wins[i].wid);
-		else
-			report_window(i, 0);
-	}
-}
-
 void wimy_start_tracking(void) {
 	@autoreleasepool {
 	NSNotificationCenter *wc = [[NSWorkspace sharedWorkspace] notificationCenter];
@@ -338,11 +333,7 @@ void wimy_start_tracking(void) {
 	            }];
 	[wc addObserverForName:NSWorkspaceDidHideApplicationNotification object:nil queue:[NSOperationQueue mainQueue]
 	            usingBlock:^(NSNotification *n) {
-		            set_app_hidden(((NSRunningApplication *)n.userInfo[NSWorkspaceApplicationKey]).processIdentifier, 1);
-	            }];
-	[wc addObserverForName:NSWorkspaceDidUnhideApplicationNotification object:nil queue:[NSOperationQueue mainQueue]
-	            usingBlock:^(NSNotification *n) {
-		            set_app_hidden(((NSRunningApplication *)n.userInfo[NSWorkspaceApplicationKey]).processIdentifier, 0);
+		            unhide_app(n.userInfo[NSWorkspaceApplicationKey]);
 	            }];
 	[wc addObserverForName:NSWorkspaceDidLaunchApplicationNotification object:nil queue:[NSOperationQueue mainQueue]
 	            usingBlock:^(NSNotification *n) {

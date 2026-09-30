@@ -7,7 +7,8 @@
 #    private temp dir;
 # 2. stores it (as .p12 + password) in the `release` environment's
 #    secrets of the GitHub repo, creating the environment with you as
-#    required reviewer (GitHub side first: if that fails, nothing changed);
+#    required reviewer if it doesn't exist (GitHub side first: if that
+#    fails, nothing changed);
 # 3. deletes the old identity from the login keychain (two identities
 #    with one name make codesign refuse), imports the new one and trusts
 #    it for code signing (macOS asks for your password).
@@ -48,9 +49,16 @@ pass=$("$ssl" rand -hex 24)
 	-out "$tmp/identity.p12" -passout "pass:$pass"
 echo "generated a new \"$name\" ($("$ssl" x509 -in "$tmp/cert.pem" -noout -fingerprint -sha1 | cut -d= -f2))"
 
-echo "GitHub: environment \"release\" (you as required reviewer) and its signing secrets…"
-gh api -X PUT "repos/$repo/environments/release" \
-	-F "reviewers[][type]=User" -F "reviewers[][id]=$(gh api user -q .id)" >/dev/null
+echo "GitHub: environment \"release\" and its signing secrets…"
+# creating an environment needs the repo owner/an admin; reuse one that exists
+if ! gh api "repos/$repo/environments/release" >/dev/null 2>&1; then
+	gh api -X PUT "repos/$repo/environments/release" \
+		-F "reviewers[][type]=User" -F "reviewers[][id]=$(gh api user -q .id)" >/dev/null
+fi
+if [ "$(gh api "repos/$repo/environments/release" -q '[.protection_rules[]? | select(.type == "required_reviewers")] | length')" = 0 ]; then
+	echo "warning: \"release\" has no required reviewers: any tag pushed by someone with write access" >&2
+	echo "         produces a signed build. Add yourself under Settings → Environments → release." >&2
+fi
 base64 -i "$tmp/identity.p12" | gh secret set WIMY_SIGNING_P12 --env release --repo "$repo"
 printf '%s' "$pass" | gh secret set WIMY_SIGNING_P12_PASSWORD --env release --repo "$repo"
 

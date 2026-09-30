@@ -122,6 +122,9 @@ func (c *Core) Kill(id wm.WindowID) { c.platform.Kill(id) }
 // Quit implements command.Effects via the platform.
 func (c *Core) Quit() { c.platform.Quit() }
 
+// Restart implements command.Effects via the platform.
+func (c *Core) Restart() error { return c.platform.Restart() }
+
 // detach starts cmd without waiting for it; it reaps the process in
 // the background. It reports whether the start succeeded.
 func detach(cmd *exec.Cmd) bool {

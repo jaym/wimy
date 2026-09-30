@@ -6,6 +6,7 @@
 //	run       {"command": "focus left"}  execute a command
 //	state                              full state snapshot
 //	subscribe                          immediate state + state notifications
+//	version                            version, start time and pid
 //	quit                               exit the window manager
 package rpc
 
@@ -22,6 +23,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"wimy/internal/wm"
 )
@@ -102,9 +104,36 @@ func socketPath(goos string, getenv func(string) string, tmp string, uid int) st
 	return filepath.Join(dir, "wimy-"+disp+".sock")
 }
 
+// Info describes the running wimy, for the version method.
+type Info struct {
+	Version string
+	Started time.Time
+}
+
+// VersionInfo is the result of the version method.
+type VersionInfo struct {
+	Version string    `json:"version"`
+	Started time.Time `json:"started"` // tells a restarted wimy from the old one
+	PID     int       `json:"pid"`
+}
+
+// ErrAlreadyRunning is returned by Listen when another wimy answers on
+// the socket.
+var ErrAlreadyRunning = errors.New("another wimy is already running")
+
+// Running reports whether a wimy answers on the socket at path.
+func Running(path string) bool {
+	_, conn, err := Call(path, "version", nil)
+	if conn != nil {
+		conn.Close()
+	}
+	return err == nil
+}
+
 // Server is the JSON-RPC server.
 type Server struct {
 	b    Backend
+	info Info
 	ln   net.Listener
 	path string
 
@@ -122,9 +151,14 @@ type client struct {
 	sub  bool
 }
 
-// Listen creates the socket and starts serving.
-func Listen(b Backend) (*Server, error) {
+// Listen creates the socket and starts serving. If another wimy
+// answers on the socket it returns ErrAlreadyRunning and leaves that
+// socket alone.
+func Listen(b Backend, info Info) (*Server, error) {
 	path := SocketPath()
+	if Running(path) {
+		return nil, ErrAlreadyRunning
+	}
 	if runtime.GOOS == "darwin" && os.Getenv("WIMY_SOCKET") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
 		if err := prepareSocketDir(filepath.Dir(path)); err != nil {
 			return nil, err
@@ -139,6 +173,7 @@ func Listen(b Backend) (*Server, error) {
 	}
 	s := &Server{
 		b:       b,
+		info:    info,
 		ln:      ln,
 		path:    path,
 		subs:    make(map[*client]bool),
@@ -286,6 +321,9 @@ func (s *Server) handle(c *client, line []byte) *Response {
 
 	case "state":
 		resp.Result = s.stateSnapshot()
+
+	case "version":
+		resp.Result = VersionInfo{Version: s.info.Version, Started: s.info.Started, PID: os.Getpid()}
 
 	case "subscribe":
 		s.mu.Lock()

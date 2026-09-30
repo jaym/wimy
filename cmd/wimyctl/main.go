@@ -7,6 +7,8 @@
 //	wimyctl [-socket path] state              print the state as JSON
 //	wimyctl [-socket path] subscribe          stream state notifications
 //	wimyctl [-socket path] quit               exit wimy
+//	wimyctl [-socket path] restart            restart wimy in place (macOS), keeping its state
+//	wimyctl [-socket path] version            print wimy's version
 package main
 
 import (
@@ -16,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"wimy/internal/rpc"
 )
@@ -28,6 +31,9 @@ commands:
   state              print the full state as JSON
   subscribe          stream state notifications as JSON lines
   quit               exit the window manager
+  restart            replace wimy with the installed version, keeping its
+                     state (macOS)
+  version            print the running wimy's version and start time
 `)
 	os.Exit(2)
 }
@@ -98,6 +104,20 @@ func main() {
 			fmt.Fprintf(os.Stderr, "wimyctl: %v\n", err)
 			os.Exit(1)
 		}
+
+	case "restart":
+		if err := restart(*socketPath); err != nil {
+			fmt.Fprintf(os.Stderr, "wimyctl: %v\n", err)
+			os.Exit(1)
+		}
+
+	case "version":
+		v, err := version(*socketPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "wimyctl: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("wimy %s (pid %d, started %s)\n", v.Version, v.PID, v.Started.Format(time.RFC3339))
 
 	default:
 		usage()

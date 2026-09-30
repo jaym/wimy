@@ -1,9 +1,14 @@
 package rpc
 
 import (
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"wimy/internal/wm"
 )
 
 func TestSocketPath(t *testing.T) {
@@ -48,5 +53,65 @@ func TestPrepareSocketDir(t *testing.T) {
 	}
 	if err := prepareSocketDir(dir); err == nil {
 		t.Errorf("dir readable by others accepted")
+	}
+}
+
+type fakeBackend struct{}
+
+func (fakeBackend) QueueCommand(string)         {}
+func (fakeBackend) CommandNames() []string      { return nil }
+func (fakeBackend) Snapshot(fn func(*wm.State)) { fn(wm.NewState()) }
+
+// shortSocket returns a socket path short enough for sun_path.
+func shortSocket(t *testing.T) string {
+	dir, err := os.MkdirTemp("/tmp", "wimyrpc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	return filepath.Join(dir, "s.sock")
+}
+
+func TestVersionAndRunning(t *testing.T) {
+	path := shortSocket(t)
+	t.Setenv("WIMY_SOCKET", path)
+	started := time.Unix(1700000000, 0)
+	srv, err := Listen(fakeBackend{}, Info{Version: "v1.2.3", Started: started})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !Running(path) {
+		t.Errorf("Running = false for a live server")
+	}
+	res, conn, err := Call(path, "version", nil)
+	if conn != nil {
+		conn.Close()
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	var v VersionInfo
+	if err := json.Unmarshal(res, &v); err != nil || v.Version != "v1.2.3" || !v.Started.Equal(started) || v.PID != os.Getpid() {
+		t.Errorf("version = %+v, %v", v, err)
+	}
+	srv.Close()
+	if Running(path) {
+		t.Errorf("Running = true after Close")
+	}
+}
+
+func TestAnotherInstanceRunning(t *testing.T) {
+	path := shortSocket(t)
+	t.Setenv("WIMY_SOCKET", path)
+	srv, err := Listen(fakeBackend{}, Info{Version: "a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	if _, err := Listen(fakeBackend{}, Info{Version: "b"}); !errors.Is(err, ErrAlreadyRunning) {
+		t.Errorf("second Listen: %v, want ErrAlreadyRunning (it must not take the socket over)", err)
+	}
+	if !Running(path) {
+		t.Errorf("first server lost its socket")
 	}
 }

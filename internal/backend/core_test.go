@@ -15,16 +15,18 @@ import (
 
 // fakePlatform records what the Core asks of its backend.
 type fakePlatform struct {
-	wakes   atomic.Int32
-	changes []ConfigChange
-	killed  []wm.WindowID
-	quit    bool
+	wakes     atomic.Int32
+	changes   []ConfigChange
+	killed    []wm.WindowID
+	quit      bool
+	restarted bool
 }
 
 func (f *fakePlatform) Wake()                             { f.wakes.Add(1) }
 func (f *fakePlatform) ApplyConfigChange(ch ConfigChange) { f.changes = append(f.changes, ch) }
 func (f *fakePlatform) Kill(id wm.WindowID)               { f.killed = append(f.killed, id) }
 func (f *fakePlatform) Quit()                             { f.quit = true }
+func (f *fakePlatform) Restart() error                    { f.restarted = true; return nil }
 
 // newTestCore returns a Core over a state with one output.
 func newTestCore(t *testing.T, cfg *config.Config) (*Core, *fakePlatform) {
@@ -191,5 +193,14 @@ func TestSpawnTerminalAndMenuUseShell(t *testing.T) {
 			b, err := os.ReadFile(filepath.Join(dir, name))
 			return err == nil && string(b) == want
 		})
+	}
+}
+
+func TestRestartReachesPlatform(t *testing.T) {
+	c, p := newTestCore(t, nil)
+	c.Enqueue("restart")
+	c.DrainQueue()
+	if !p.restarted {
+		t.Errorf("restart did not reach the platform")
 	}
 }

@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"wimy/internal/config"
 	"wimy/internal/rpc"
@@ -25,6 +27,9 @@ type wmBackend interface {
 	// Shutdown stops the event loop.
 	Shutdown()
 }
+
+// version is set at build time: -ldflags "-X main.version=...".
+var version = "dev"
 
 func main() {
 	configPath := flag.String("config", "", "path to config.kdl (default ~/.config/wimy/config.kdl)")
@@ -40,7 +45,7 @@ func main() {
 		log.SetOutput(io.MultiWriter(os.Stderr, f))
 		defer f.Close()
 	}
-	log.Printf("wimy: starting (log: %s)", *logPath)
+	log.Printf("wimy %s: starting (log: %s)", version, *logPath)
 
 	cfg, err := config.Load(*configPath)
 	if err != nil {
@@ -57,7 +62,13 @@ func main() {
 		log.Fatalf("wimy: %v", err)
 	}
 
-	server, err = rpc.Listen(backend)
+	server, err = rpc.Listen(backend, rpc.Info{Version: version, Started: time.Now()})
+	if errors.Is(err, rpc.ErrAlreadyRunning) {
+		// e.g. the login agent and a manual start: exit successfully,
+		// so launchd doesn't restart this one
+		log.Printf("wimy: %v; exiting", err)
+		return
+	}
 	if err != nil {
 		log.Fatalf("wimy: rpc: %v", err)
 	}

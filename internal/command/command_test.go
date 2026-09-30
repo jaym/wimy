@@ -14,6 +14,7 @@ type fakeFx struct {
 	killed        wm.WindowID
 	quit          bool
 	reloaded      bool
+	restarted     bool
 }
 
 func (f *fakeFx) Spawn(argv []string) error { return nil }
@@ -24,6 +25,7 @@ func (f *fakeFx) Actions() []string         { return f.actions }
 func (f *fakeFx) Kill(id wm.WindowID)       { f.killed = id }
 func (f *fakeFx) Quit()                     { f.quit = true }
 func (f *fakeFx) Reload() error             { f.reloaded = true; return nil }
+func (f *fakeFx) Restart() error            { f.restarted = true; return nil }
 func (f *fakeFx) Prompt(kind PromptKind, choices []string) error {
 	f.promptKind = kind
 	f.promptChoices = choices
@@ -122,5 +124,15 @@ func TestFullscreenCommand(t *testing.T) {
 	}
 	if !fs {
 		t.Errorf("fullscreen command did not make the focused window fullscreen")
+	}
+}
+
+func TestRestartCommand(t *testing.T) {
+	env, fx := newTestEnv()
+	if err := New(env).Run("restart"); err != nil {
+		t.Fatal(err)
+	}
+	if !fx.restarted {
+		t.Errorf("restart did not reach the effects")
 	}
 }

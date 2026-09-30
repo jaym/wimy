@@ -290,6 +290,9 @@ func (b *Backend) ApplyConfigChange(ch backend.ConfigChange) {
 // button.
 func (b *Backend) Kill(id wm.WindowID) { C.wimy_window_close(C.uint32_t(id)) }
 
+// Restart implements backend.Platform (see restart_darwin.go).
+func (b *Backend) Restart() error { return b.restart() }
+
 // Quit implements backend.Platform: wimy exits; windows stay where
 // they are.
 func (b *Backend) Quit() { C.wimy_app_stop() }

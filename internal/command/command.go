@@ -52,6 +52,9 @@ type Effects interface {
 	// Reload re-reads the configuration file and applies changes
 	// (key bindings, colors, programs, autostart).
 	Reload() error
+	// Restart replaces the running wimy with the executable on disk
+	// (an update), handing over the whole state.
+	Restart() error
 }
 
 // Env is the context command handlers run in.
@@ -80,6 +83,7 @@ func New(env *Env) *Registry {
 		"move":               cmdMove,
 		"toggle-float":       func(e *Env, _ []string) error { e.State.ToggleFloat(); return nil },
 		"fullscreen":         func(e *Env, _ []string) error { e.State.ToggleFullscreen(); return nil },
+		"restart":            func(e *Env, _ []string) error { return e.Fx.Restart() },
 		"mode":               cmdMode,
 		"grow":               cmdGrow,
 		"view":               cmdView,

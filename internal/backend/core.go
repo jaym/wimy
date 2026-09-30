@@ -23,6 +23,9 @@ type Platform interface {
 	Kill(id wm.WindowID)
 	// Quit exits the window manager.
 	Quit()
+	// Restart replaces the process with the executable on disk, handing
+	// over the state (see WriteHandoff); an error means wimy keeps running.
+	Restart() error
 }
 
 // Core is the platform-neutral backend state: the model, the config,

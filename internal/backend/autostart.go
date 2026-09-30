@@ -73,9 +73,16 @@ func (a *Autostart) track(p *autostartProc) {
 
 // Adopt takes over an autostart process started by the wimy this one
 // replaced (a restart execs in place, so it is still our child): it is
-// tracked, reaped and reconciled like one started here.
+// tracked, reaped and reconciled like one started here. pid 0 records
+// an entry whose process had already exited, so a reload restarts it.
 func (a *Autostart) Adopt(cmdline string, pid int) {
 	p := &autostartProc{cmdline: cmdline, pid: pid, pgid: pid, done: make(chan struct{})}
+	if pid == 0 {
+		p.dead.Store(true)
+		close(p.done)
+		a.track(p)
+		return
+	}
 	proc, err := os.FindProcess(pid)
 	if err != nil {
 		return
@@ -88,8 +95,23 @@ func (a *Autostart) Adopt(cmdline string, pid int) {
 	a.track(p)
 }
 
-// Pids returns the live autostart processes by command line, for the
-// restart handoff.
+// Entries returns every tracked autostart process by command line, for
+// the restart handoff: live ones by pid, exited ones as 0.
+func (a *Autostart) Entries() map[string][]int {
+	out := make(map[string][]int)
+	for cmdline, procs := range a.procs {
+		for _, p := range procs {
+			if p.dead.Load() {
+				out[cmdline] = append(out[cmdline], 0)
+			} else {
+				out[cmdline] = append(out[cmdline], p.pid)
+			}
+		}
+	}
+	return out
+}
+
+// Pids returns the live autostart processes by command line.
 func (a *Autostart) Pids() map[string][]int {
 	out := make(map[string][]int)
 	for cmdline, procs := range a.procs {

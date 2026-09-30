@@ -22,8 +22,11 @@ type Handoff struct {
 	Boot      int64            `json:"boot"` // boot time: window ids restart after a reboot
 	Written   time.Time        `json:"written"`
 	Model     json.RawMessage  `json:"model"`
-	Autostart map[string][]int `json:"autostart,omitempty"`
-	Platform  json.RawMessage  `json:"platform,omitempty"`
+	Autostart map[string][]int `json:"autostart,omitempty"` // pid 0: exited
+	// AutostartConfig is the old process's autostart list: the new one
+	// reconciles the adopted children with its own config against it.
+	AutostartConfig []string        `json:"autostart_config,omitempty"`
+	Platform        json.RawMessage `json:"platform,omitempty"`
 }
 
 // WriteHandoff saves the handoff for a restart to path, atomically.
@@ -34,7 +37,8 @@ func (c *Core) WriteHandoff(path string, boot int64, platform any) error {
 	if err != nil {
 		return err
 	}
-	h := Handoff{Boot: boot, Written: time.Now(), Model: model, Autostart: c.autostart.Pids()}
+	h := Handoff{Boot: boot, Written: time.Now(), Model: model,
+		Autostart: c.autostart.Entries(), AutostartConfig: c.Cfg.Autostart}
 	if platform != nil {
 		if h.Platform, err = json.Marshal(platform); err != nil {
 			return err
@@ -92,6 +96,9 @@ func (c *Core) ReadHandoff(path string, boot int64, now time.Time, platform any)
 			c.autostart.Adopt(cmdline, pid)
 		}
 	}
+	// this process may have loaded a config the old one never reloaded:
+	// start what it adds, stop what it drops, revive what had died
+	c.autostart.Sync(h.AutostartConfig, c.Cfg.Autostart)
 	if platform != nil && len(h.Platform) > 0 {
 		if err := json.Unmarshal(h.Platform, platform); err != nil {
 			return true, err

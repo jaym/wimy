@@ -121,13 +121,16 @@ type VersionInfo struct {
 // the socket.
 var ErrAlreadyRunning = errors.New("another wimy is already running")
 
-// Running reports whether a wimy answers on the socket at path.
+// Running reports whether a process accepts connections on the socket
+// at path — any wimy, including one too old to know the version
+// method. A socket file left by a wimy that died refuses connections.
 func Running(path string) bool {
-	_, conn, err := Call(path, "version", nil)
-	if conn != nil {
-		conn.Close()
+	conn, err := net.DialTimeout("unix", path, time.Second)
+	if err != nil {
+		return false
 	}
-	return err == nil
+	conn.Close()
+	return true
 }
 
 // Server is the JSON-RPC server.

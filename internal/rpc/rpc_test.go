@@ -1,8 +1,10 @@
 package rpc
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -113,5 +115,30 @@ func TestAnotherInstanceRunning(t *testing.T) {
 	}
 	if !Running(path) {
 		t.Errorf("first server lost its socket")
+	}
+}
+
+func TestRunningOlderWimy(t *testing.T) {
+	// a wimy from before the version method answers with an RPC error:
+	// it is running all the same, and its socket must not be taken over
+	path := shortSocket(t)
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			bufio.NewReader(c).ReadBytes('\n')
+			c.Write([]byte(`{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"unknown method"}}` + "\n"))
+			c.Close()
+		}
+	}()
+	if !Running(path) {
+		t.Errorf("an answering older wimy counted as not running")
 	}
 }

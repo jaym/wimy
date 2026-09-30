@@ -309,6 +309,9 @@ make mac-signing-identity   # once: a self-signed code-signing certificate
 make mac-install            # build, sign and install ~/Applications/Wimy.app
 ```
 
+The first signing asks for your login password to let `codesign` use
+the key: choose **Always Allow**, or every build asks again.
+
 `make mac-install` puts `wimyctl` in `~/.local/bin` and starts Wimy, or,
 if it is running, restarts it in place with the new version: views,
 tags, columns, floating windows and parked windows all carry over

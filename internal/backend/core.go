@@ -90,6 +90,28 @@ func (c *Core) DrainQueue() {
 	}
 }
 
+// DrainQueueIf executes the pending commands allow accepts, in order,
+// and keeps the others queued (a backend that isn't up yet runs quit,
+// and leaves the rest for later).
+func (c *Core) DrainQueueIf(allow func(cmd string) bool) {
+	c.mu.Lock()
+	var run, keep []string
+	for _, cmd := range c.queue {
+		if allow(cmd) {
+			run = append(run, cmd)
+		} else {
+			keep = append(keep, cmd)
+		}
+	}
+	c.queue = keep
+	c.mu.Unlock()
+	for _, cmd := range run {
+		if err := c.Reg.Run(cmd); err != nil {
+			log.Printf("command %q: %v", cmd, err)
+		}
+	}
+}
+
 // StartAutostart runs the configured autostart commands.
 func (c *Core) StartAutostart() {
 	c.autostart.StartAll(c.Cfg.Autostart)

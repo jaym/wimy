@@ -78,12 +78,14 @@ type Backend struct {
 	decoKeys  decoCache
 
 	// menu bar item and startup state
-	started   bool       // start() ran (Accessibility granted)
-	restarted bool       // took over a restart handoff
-	login     int        // start-at-login status (loginOff, ...)
-	menuTitle string     // what the status item shows, to skip no-op updates
-	menu      []menuItem // current menu; goMenuItem indexes it
-	menuShown bool
+	started          bool       // start() ran (Accessibility granted)
+	storeOK          bool       // the hidden store was loaded: saving it is safe
+	unregisterAtExit bool       // start-at-login turned off while running as the login agent
+	restarted        bool       // took over a restart handoff
+	login            int        // start-at-login status (loginOff, ...)
+	menuTitle        string     // what the status item shows, to skip no-op updates
+	menu             []menuItem // current menu; goMenuItem indexes it
+	menuShown        bool
 
 	// away remembers the views (tags) of minimized windows, so a
 	// restored window returns to them instead of the focused view.
@@ -190,6 +192,9 @@ func (b *Backend) Run(ctx context.Context) error {
 	C.wimy_app_run()
 	// Quit, Shutdown (SIGINT/SIGTERM): never leave windows parked
 	b.unhideAll()
+	if b.unregisterAtExit {
+		C.wimy_login_set(0) // kills the agent job: that is this exiting process
+	}
 	return nil
 }
 
@@ -211,6 +216,7 @@ func (b *Backend) start() {
 	} else {
 		b.restore = m
 	}
+	b.storeOK = true
 	restarted := b.restarted
 	b.syncScreens()
 	if restarted {
@@ -264,7 +270,17 @@ func (b *Backend) start() {
 // applyLogin registers or unregisters the login item per start-at-login
 // (only when running from Wimy.app).
 func (b *Backend) applyLogin() {
-	b.login = int(C.wimy_login_set(cbool(b.Cfg.StartAtLogin)))
+	b.unregisterAtExit = false
+	switch loginAction(b.Cfg.StartAtLogin, os.Getenv("XPC_SERVICE_NAME") == "io.github.jaym.wimy") {
+	case loginRegister:
+		b.login = int(C.wimy_login_set(1))
+	case loginUnregister:
+		b.login = int(C.wimy_login_set(0))
+	case loginUnregisterAtExit:
+		b.unregisterAtExit = true
+		b.login = int(C.wimy_login_status())
+		log.Printf("start at login turned off: wimy leaves Login Items when it quits")
+	}
 	if b.login == loginApproval {
 		log.Printf("start at login: approve Wimy in System Settings → General → Login Items")
 	}
@@ -432,6 +448,13 @@ func goApply() {
 // changed frames and focus to AX.
 func (b *Backend) apply() {
 	b.scheduled = false
+	if !b.started {
+		// waiting for the Accessibility permission: nothing can be
+		// moved yet; only quit runs, the rest waits for start()
+		b.DrainQueueIf(func(cmd string) bool { return cmd == "quit" })
+		b.updateMenu()
+		return
+	}
 	b.DrainQueue()
 	var moved []wm.Placement
 	start := time.Now()
@@ -740,8 +763,13 @@ func (b *Backend) park(id wm.WindowID, last wm.Rect, w, h int32) {
 	}
 }
 
-// unhideAll puts every parked window back where it was.
+// unhideAll puts every parked window back where it was. Before start()
+// (no permission yet) it does nothing: nothing was parked by this
+// process, and saving would overwrite the store with an empty one.
 func (b *Backend) unhideAll() {
+	if !b.started {
+		return
+	}
 	for id, r := range b.hidden {
 		b.setFrame(id, onScreen(b.outputs, r))
 	}
@@ -756,7 +784,7 @@ func (b *Backend) unhideAll() {
 // saveHidden persists parked windows plus not-yet-seen ones a previous
 // wimy parked.
 func (b *Backend) saveHidden() {
-	if b.store.path == "" {
+	if b.store.path == "" || !b.storeOK {
 		return
 	}
 	m := make(map[wm.WindowID]wm.Rect, len(b.hidden)+len(b.restore))

@@ -215,3 +215,17 @@ func TestConfigPath(t *testing.T) {
 		t.Errorf("ConfigPath = %q, want the default path %q", got, config.DefaultPath())
 	}
 }
+
+func TestDrainQueueIf(t *testing.T) {
+	c, p := newTestCore(t, nil)
+	c.Enqueue("view web")
+	c.Enqueue("quit")
+	c.Enqueue("view 2")
+	c.DrainQueueIf(func(cmd string) bool { return cmd == "quit" })
+	if !p.quit {
+		t.Errorf("allowed command did not run")
+	}
+	if got := queued(c); !slices.Equal(got, []string{"view web", "view 2"}) {
+		t.Errorf("queue = %v, want the other commands kept, in order", got)
+	}
+}

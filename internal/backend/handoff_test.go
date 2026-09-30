@@ -131,3 +131,32 @@ func layoutOf(s *wm.State) string {
 	sort.Strings(lines)
 	return strings.Join(lines, "\n")
 }
+
+func TestHandoffReconcilesAutostart(t *testing.T) {
+	// the old process ran "sleep 31" and "sleep 32" (and "true", which
+	// had died); the config the new process loaded lists sleep 31,
+	// sleep 33 and true
+	path := filepath.Join(t.TempDir(), "handoff.json")
+	oldCfg := config.Default()
+	oldCfg.Autostart = []string{"sleep 31", "sleep 32", "true"}
+	old := NewCore(oldCfg, "", &fakePlatform{})
+	old.StartAutostart()
+	waitFor(t, "true to exit", func() bool { return len(old.autostart.Pids()["true"]) == 0 })
+	if err := old.WriteHandoff(path, 1, nil); err != nil {
+		t.Fatal(err)
+	}
+	newCfg := config.Default()
+	newCfg.Autostart = []string{"sleep 31", "sleep 33", "true"}
+	next := NewCore(newCfg, "", &fakePlatform{})
+	t.Cleanup(func() { next.autostart.Sync(newCfg.Autostart, nil); old.autostart.Sync([]string{"sleep 32"}, nil) })
+	if ok, err := next.ReadHandoff(path, 1, time.Now(), nil); !ok || err != nil {
+		t.Fatalf("ReadHandoff = %v %v", ok, err)
+	}
+	pids := next.autostart.Pids()
+	if len(pids["sleep 31"]) != 1 || len(pids["sleep 33"]) != 1 || len(pids["sleep 32"]) != 0 {
+		t.Errorf("after the handoff: %v, want sleep 31 kept, sleep 33 started, sleep 32 stopped", pids)
+	}
+	if len(pids["true"]) != 1 && len(next.autostart.procs["true"]) != 1 {
+		t.Errorf("an entry that had died before the restart was not restarted: %v", next.autostart.procs["true"])
+	}
+}

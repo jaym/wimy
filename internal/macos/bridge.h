@@ -64,6 +64,7 @@ void wimy_status_remove(void);
 // io.github.jaym.wimy.plist). Returns -1 when not running from
 // Wimy.app, else 0 off, 1 on, 2 needs approval.
 int wimy_login_set(int on);
+int wimy_login_status(void); // like wimy_login_set, without changing anything
 void wimy_open_accessibility_settings(void);
 void wimy_start_trust_poll(void); // goTrustTick every second
 // Returns 0 on success; the AXError of the position and final size

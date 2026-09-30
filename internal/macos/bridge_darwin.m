@@ -772,6 +772,17 @@ int wimy_login_set(int on) {
 	}
 }
 
+int wimy_login_status(void) {
+	@autoreleasepool {
+		if (![[NSBundle mainBundle].bundleIdentifier isEqualToString:@"io.github.jaym.wimy"]) return -1;
+		switch ([SMAppService agentServiceWithPlistName:@"io.github.jaym.wimy.plist"].status) {
+		case SMAppServiceStatusEnabled: return 1;
+		case SMAppServiceStatusRequiresApproval: return 2;
+		default: return 0;
+		}
+	}
+}
+
 void wimy_open_accessibility_settings(void) {
 	@autoreleasepool {
 		[[NSWorkspace sharedWorkspace]

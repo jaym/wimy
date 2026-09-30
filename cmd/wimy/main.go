@@ -36,7 +36,17 @@ var version = "dev"
 func main() {
 	configPath := flag.String("config", "", "path to config.kdl (default ~/.config/wimy/config.kdl)")
 	logPath := flag.String("log", "", "log file (default $XDG_RUNTIME_DIR/wimy-$WAYLAND_DISPLAY.log; ~/Library/Logs/wimy.log on macOS)")
+	checkOnly := flag.Bool("check", false, "load the config and exit (restart runs this with the new binary first)")
 	flag.Parse()
+
+	if *checkOnly {
+		if err := check(*configPath); err != nil {
+			fmt.Fprintf(os.Stderr, "wimy: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("wimy: ok")
+		return
+	}
 
 	// log to a file as well as stderr: on a TTY river's stderr is
 	// invisible once the session starts

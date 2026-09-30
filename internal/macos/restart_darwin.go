@@ -3,12 +3,16 @@
 package macos
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"syscall"
+	"time"
 
 	"wimy/internal/wm"
 )
@@ -35,6 +39,15 @@ func (b *Backend) restart() error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
+	}
+	// never replace a working window manager with one that can't
+	// start: the new binary must run and load the config first
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	// (with this process's own flags, so it reads the same config)
+	args := append([]string{"-check"}, os.Args[1:]...)
+	if out, err := exec.CommandContext(ctx, exe, args...).CombinedOutput(); err != nil {
+		return fmt.Errorf("restart: %s -check failed, keeping this wimy: %v: %s", exe, err, strings.TrimSpace(string(out)))
 	}
 	parked := make([]wm.WindowID, 0, len(b.parked))
 	for id := range b.parked {

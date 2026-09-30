@@ -98,3 +98,16 @@ func TestApplyConfigNoChanges(t *testing.T) {
 		t.Errorf("platform changes = %+v, want one empty change", p.changes)
 	}
 }
+
+func TestReloadBarGap(t *testing.T) {
+	c, p, _, path := newReloadCore(t, "")
+	if err := os.WriteFile(path, []byte("bar-gap 37\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(p.changes, []ConfigChange{{BarGap: true}}) {
+		t.Errorf("platform changes = %+v, want BarGap", p.changes)
+	}
+}

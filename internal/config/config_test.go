@@ -214,3 +214,24 @@ func TestCompoundModUnsupported(t *testing.T) {
 		}
 	}
 }
+
+func TestBarGap(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.kdl")
+	if err := os.WriteFile(path, []byte("bar-gap 37\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(path)
+	if err != nil || c.BarGap != 37 {
+		t.Fatalf("bar-gap: %d, %v", c.BarGap, err)
+	}
+	if Default().BarGap != 0 {
+		t.Errorf("default bar-gap %d, want 0", Default().BarGap)
+	}
+	if err := os.WriteFile(path, []byte("bar-gap -1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Errorf("negative bar-gap accepted")
+	}
+}

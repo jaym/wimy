@@ -111,9 +111,13 @@ type Config struct {
 	Border            Border
 	Titlebar          Titlebar
 	StackStrip        int32
-	Binds             []Bind
-	Actions           map[string]string // name -> shell command
-	Autostart         []string
+	// BarGap is the space in points reserved at the top of every screen
+	// for a bar the window manager doesn't know about (SketchyBar).
+	// macOS only: on Linux bars reserve space through the layer shell.
+	BarGap    int32
+	Binds     []Bind
+	Actions   map[string]string // name -> shell command
+	Autostart []string
 }
 
 // Default returns the built-in configuration: wmii's key binding set
@@ -332,6 +336,16 @@ func (c *Config) applyNode(n *document.Node) error {
 			return fmt.Errorf("focus-follows-mouse: want true or false")
 		}
 		c.FocusFollowsMouse = v
+
+	case "bar-gap":
+		if len(n.Arguments) < 1 {
+			return fmt.Errorf("bar-gap: missing point value")
+		}
+		v, ok := n.Arguments[0].Value.(int64)
+		if !ok || v < 0 {
+			return fmt.Errorf("bar-gap: want a non-negative integer")
+		}
+		c.BarGap = int32(v)
 
 	case "stack-strip":
 		if len(n.Arguments) < 1 {

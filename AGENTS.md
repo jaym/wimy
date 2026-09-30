@@ -200,6 +200,17 @@ go generate ./internal/proto
   in the store *before* moving (`hide`), and put parked windows back on
   every exit path (`unhideAll` after the run loop, `guard` on panics in
   callbacks).
+- Decorations are one borderless, non-activating NSPanel per window,
+  ordered directly *behind* it with `orderWindow:NSWindowBelow
+  relativeTo:<CGWindowID>` (works for other apps' windows — verified by
+  reading the window server's stacking order). The panel is content +
+  border (3 sides) + titlebar, filled with the border color; the window
+  covers the middle, which also fills Tahoe's rounded corners. Stack
+  strips are the only panels ordered in front (their window is
+  parked). Titlebar images are `internal/titlebar` BGRA pixels, used as
+  a CGImage directly (`kCGBitmapByteOrder32Little |
+  kCGImageAlphaPremultipliedFirst`); SF (`SFNS.ttf`) parses with
+  x/image/opentype, `.ttc` collections don't.
 - One wimy focus request produces two notifications (AX focused-window
   changed, app activated); `focusEcho` treats all of them within 500ms
   as echoes, or quick Option-j presses bounce focus back.

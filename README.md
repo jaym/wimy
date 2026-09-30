@@ -302,8 +302,8 @@ converting sway-style `output … scale …` lines.
 
 A macOS backend is being built (`plans/macos-port.md`). It tiles every
 screen, switches views, follows focus changes you make with the mouse
-or Cmd-Tab, and runs the key bindings; titlebars, borders and the
-mouse come later. It needs the
+or Cmd-Tab, draws wimy's titlebars and borders, and runs the key
+bindings; the mouse (drags) comes later. It needs the
 Accessibility permission (System Settings → Privacy & Security →
 Accessibility) for whatever starts it — for now the terminal you run
 `wimy` from.
@@ -324,6 +324,13 @@ Accessibility) for whatever starts it — for now the terminal you run
   `~/.local/state/wimy/hidden.json` (or `$XDG_STATE_HOME/wimy`) before
   they move: `wimyctl quit`, Ctrl-C and SIGTERM put them back, and if
   wimy is killed, the next start does.
+- **Titlebars and borders:** every window gets wimy's titlebar and a
+  border, drawn by a panel right behind the window, so apps keep their
+  own titlebar too (the same double decoration as Firefox on Linux).
+  Clicking a titlebar focuses its window. In stack mode, collapsed
+  windows are parked like hidden ones and only their titlebar strip
+  shows; click it to expand the window. With `titlebar "off"`, windows
+  get a border only and stack strips are `stack-strip` high.
 - **Screens:** every screen is an output; windows already open when
   wimy starts join the view of the screen they are on.
 - **Minimize and hide:** a minimized window leaves the tiling and

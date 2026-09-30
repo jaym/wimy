@@ -353,6 +353,15 @@ with SketchyBar and `bar-gap 37`:
 
 ### Phase 3 — decorations
 
+**Status (2026-09-30): done** (`plans/macos-phase3.md`), live-tested:
+titlebars and borders on every window on both screens, focus
+highlight, click-to-focus, stack strips (click expands), panels follow
+views. Instead of separate border and titlebar overlays above the
+window, one frame panel per window sits *behind* it (border fill +
+titlebar), which also covers Tahoe's rounded corners, so no
+corner-radius matching was needed. Retiles with decorations: 3–19 ms
+per window.
+
 - Borders as overlay panels driven from `Placement.Focused` and colors
   from config.
 - Titlebars: `internal/titlebar` renders RGBA → `CGImage` in an overlay

@@ -115,6 +115,19 @@ TAGS_NOW=$(ctl state | jq -r '[.windows[] | select(.focused)][0].tags | join(","
 # Re-enable (check instead of skip) once `run` waits for its command.
 skip "run/state race" "tag -web removed" "$TAGS_NOW" 1
 
+# --- fullscreen ---------------------------------------------------
+# (sleeps: `run` replies before the command runs — see the flaky tag check)
+ctl run 'fullscreen' >/dev/null
+sleep 0.5
+FS=$(ctl state | jq -r '([.windows[] | select(.focused)][0].rect | "\(.W)x\(.H)") as $w
+  | (.outputs[0].rect | "\(.W)x\(.H)") as $o | if $w == $o then "yes" else "\($w) vs \($o)" end')
+check "fullscreen fills the output" "$FS" yes
+ctl run 'fullscreen' >/dev/null
+sleep 0.5
+FS=$(ctl state | jq -r '([.windows[] | select(.focused)][0].rect | "\(.W)x\(.H)") as $w
+  | (.outputs[0].rect | "\(.W)x\(.H)") as $o | if $w == $o then "still" else "restored" end')
+check "fullscreen toggles back" "$FS" restored
+
 # --- floating -----------------------------------------------------
 ctl run 'toggle-float' >/dev/null
 check "window floats" "$(ctl state | jq '[.windows[] | select(.floating)] | length')" 1

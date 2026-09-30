@@ -423,6 +423,24 @@ func ResizeColumns(c, n *Column, shift float64) {
 	n.Factor -= shift
 }
 
+// ToggleFullscreen makes the focused window the active view's
+// fullscreen window, or ends fullscreen if it already is.
+func (s *State) ToggleFullscreen() {
+	v := s.activeView()
+	if v == nil {
+		return
+	}
+	id := v.focusedWindow()
+	if id == 0 {
+		return
+	}
+	if v.Fullscreen == id {
+		v.Fullscreen = 0
+	} else {
+		v.Fullscreen = id
+	}
+}
+
 // SpreadColumns redistributes the named view's tiled windows, in
 // order, over up to maxCols equal-width columns: window i of n goes to
 // column i*k/n. The floating layer and the focused window are kept.

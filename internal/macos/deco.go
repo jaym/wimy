@@ -17,12 +17,16 @@ type decoLayout struct {
 }
 
 // decoFor returns the decoration of a placement; false for none
-// (hidden, or nothing to draw). bar is the titlebar height, border the
+// (hidden, floating, fullscreen, or nothing to draw). bar is the titlebar height, border the
 // border width. A collapsed stack window shows only a strip — its
 // titlebar, or with titlebars off a strip-high bar — since macOS can't
 // clip another app's window.
 func decoFor(p wm.Placement, bar, border int32) (decoLayout, bool) {
-	if p.Hidden {
+	// floating windows keep only their native titlebar: on macOS they
+	// are dialogs and utility windows the user moves themselves, and a
+	// panel behind a window that can overlap others is hard to keep in
+	// order. A fullscreen window fills its screen undecorated.
+	if p.Hidden || p.Layer == wm.LayerFloating || p.Fullscreen {
 		return decoLayout{}, false
 	}
 	r := p.Rect
@@ -103,4 +107,18 @@ func stripAnchor(ps []wm.Placement, strip wm.Placement) wm.WindowID {
 		}
 	}
 	return 0
+}
+
+// floatsToRaise returns the visible floating windows, bottom to top.
+// macOS has no window layers: focusing a tiled window raises its app
+// above the floating windows, so wimy raises them again afterwards to
+// keep them on top, as on Linux.
+func floatsToRaise(ps []wm.Placement) []wm.WindowID {
+	var out []wm.WindowID
+	for _, p := range ps {
+		if p.Layer == wm.LayerFloating && !p.Hidden {
+			out = append(out, p.ID)
+		}
+	}
+	return out
 }

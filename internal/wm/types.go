@@ -144,6 +144,11 @@ type View struct {
 	FocusCol   int
 	FocusFloat int
 	FocusLayer Layer
+
+	// Fullscreen is the view's fullscreen window (0: none). It fills the
+	// view while it is the focused window; focusing another window shows
+	// the normal layout until it is focused again.
+	Fullscreen WindowID
 }
 
 // focusedColumn returns the view's focused column, or nil if the view

@@ -176,6 +176,7 @@ func Default() *Config {
 		{"Mod-d", "mode default"},
 		{"Mod-s", "mode stack"},
 		{"Mod-m", "mode max"},
+		{"Mod-f", "fullscreen"},
 
 		{"Mod-Ctrl-h", "grow left"},
 		{"Mod-Ctrl-l", "grow right"},

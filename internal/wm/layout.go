@@ -13,7 +13,10 @@ type Placement struct {
 	Hidden    bool
 	Layer     Layer
 	Focused   bool
-	Output    string // name of the output this placement renders on
+	// Fullscreen: the window fills the output's tiling area, without a
+	// titlebar; the view's other windows are hidden.
+	Fullscreen bool
+	Output     string // name of the output this placement renders on
 }
 
 // Layout computes the placements for every window for the current
@@ -62,6 +65,19 @@ func (s *State) layoutOutput(o *Output, placed map[WindowID]bool) []Placement {
 	}
 	area := o.tilingArea()
 	var out []Placement
+
+	// --- fullscreen: the focused window alone, filling the area; the
+	// others are left unplaced and so hidden ---
+	if fs := v.Fullscreen; fs != 0 && fs == v.focusedWindow() && !placed[fs] {
+		return []Placement{{
+			ID:         fs,
+			Rect:       area,
+			Layer:      v.FocusLayer,
+			Focused:    fs == s.Focused,
+			Fullscreen: true,
+			Output:     o.Name,
+		}}
+	}
 
 	// --- tiled columns ---
 	widths := columnWidths(v.Columns, area.W)

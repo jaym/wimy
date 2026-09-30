@@ -59,4 +59,5 @@ void wimy_deco_destroy(uint32_t wid);
 // frame they did apply, so callers check by reading the frame back).
 int wimy_window_set_frame(uint32_t wid, double x, double y, double w, double h, int *perr, int *serr);
 void wimy_window_focus(uint32_t wid);
+void wimy_window_raise(uint32_t wid); // bring to front without focusing
 void wimy_window_close(uint32_t wid);

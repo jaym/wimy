@@ -52,8 +52,12 @@ type Backend struct {
 	scheduled bool                 // an apply pass is queued on the main queue
 	lastFocus wm.WindowID
 	echo      focusEcho
-	startup   bool // windows reported now were already open
-	notify    func()
+	// raiseFloats: wimy focused a tiled window, whose app raises it over
+	// the floating windows; raise those again on the next pass that is
+	// at least decoReorderDelay later
+	raiseFloats time.Time
+	startup     bool // windows reported now were already open
+	notify      func()
 
 	// Windows of views that aren't shown are parked in a hide corner.
 	// hidden maps each window wimy parked to its last on-screen frame,
@@ -341,6 +345,13 @@ func (b *Backend) apply() {
 	for _, p := range placements {
 		b.decorate(p, placements)
 	}
+	if !b.raiseFloats.IsZero() && time.Since(b.raiseFloats) >= decoReorderDelay*time.Millisecond {
+		b.raiseFloats = time.Time{}
+		for _, id := range floatsToRaise(placements) {
+			b.echo.sentApp(b.pids[id], time.Now()) // raising isn't a focus change
+			C.wimy_window_raise(C.uint32_t(id))
+		}
+	}
 
 	b.checkSecureInput()
 	switch f := b.State.Focused; {
@@ -348,7 +359,11 @@ func (b *Backend) apply() {
 		b.echo.sent(f, b.pids[f], time.Now())
 		C.wimy_window_focus(C.uint32_t(f))
 		// the app raises its window asynchronously; order the panels
-		// again once it has, or they stay under the windows it overlaps
+		// again once it has, or they stay under the windows it overlaps,
+		// and put floating windows back on top of a tiled one
+		if v := b.State.ActiveViewOf(f); v != nil && !v.FloatContains(f) {
+			b.raiseFloats = time.Now()
+		}
 		C.wimy_schedule_apply_after(decoReorderDelay)
 	case f == 0 && b.lastFocus != 0:
 		// an empty view: the window that had focus is parked (or gone)
@@ -750,7 +765,13 @@ func goWindowGone(wid C.uint32_t) {
 func goFocusChanged(wid C.uint32_t, pid C.int) {
 	b, id := current, wm.WindowID(wid)
 	defer b.guard()
-	if !b.known[id] || id == b.State.Focused || b.echo.isEcho(id, int(pid), time.Now()) {
+	if !b.known[id] {
+		return
+	}
+	if id == b.State.Focused || b.echo.isEcho(id, int(pid), time.Now()) {
+		// no focus change, but the app raised its window: order the
+		// panels again (a window brought back from the Dock)
+		b.markDirty()
 		return
 	}
 	b.State.FocusWindow(id)

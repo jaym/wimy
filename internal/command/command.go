@@ -79,6 +79,7 @@ func New(env *Env) *Registry {
 		"focus-window":       cmdFocusWindow,
 		"move":               cmdMove,
 		"toggle-float":       func(e *Env, _ []string) error { e.State.ToggleFloat(); return nil },
+		"fullscreen":         func(e *Env, _ []string) error { e.State.ToggleFullscreen(); return nil },
 		"mode":               cmdMode,
 		"grow":               cmdGrow,
 		"view":               cmdView,

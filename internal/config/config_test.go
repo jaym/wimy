@@ -125,7 +125,7 @@ func TestDefaultsHaveWmiiBindings(t *testing.T) {
 		"Mod-space": false, "Mod-t": false, "Mod-n": false, "Mod-b": false,
 		"Mod-Shift-h": false, "Mod-Shift-l": false, "Mod-Shift-j": false, "Mod-Shift-k": false,
 		"Mod-Shift-space": false, "Mod-Shift-t": false,
-		"Mod-d": false, "Mod-s": false, "Mod-m": false,
+		"Mod-d": false, "Mod-s": false, "Mod-m": false, "Mod-f": false,
 		"Mod-1": false, "Mod-Shift-1": false, "Mod-0": false, "Mod-Shift-0": false,
 	}
 	for _, b := range c.Binds {

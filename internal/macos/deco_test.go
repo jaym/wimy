@@ -117,3 +117,32 @@ func TestDecoContentInset(t *testing.T) {
 		t.Errorf("content = %+v, want %+v", d.Content, want)
 	}
 }
+
+func TestDecoFloatingNone(t *testing.T) {
+	// floating windows (dialogs, Calculator) keep only their native
+	// titlebar on macOS
+	p := wm.Placement{ID: 1, Rect: wm.Rect{X: 300, Y: 200, W: 400, H: 300}, Bar: true, Layer: wm.LayerFloating}
+	if d, ok := decoFor(p, 22, 2); ok {
+		t.Errorf("floating window decorated: %+v", d)
+	}
+}
+
+func TestDecoFullscreenNone(t *testing.T) {
+	p := wm.Placement{ID: 1, Rect: wm.Rect{X: 0, Y: 37, W: 1512, H: 945}, Fullscreen: true}
+	if d, ok := decoFor(p, 22, 2); ok {
+		t.Errorf("fullscreen window decorated: %+v", d)
+	}
+}
+
+func TestFloatsToRaise(t *testing.T) {
+	ps := []wm.Placement{
+		{ID: 1, Layer: wm.LayerTiled},
+		{ID: 2, Layer: wm.LayerFloating},
+		{ID: 3, Layer: wm.LayerFloating, Hidden: true}, // other view
+		{ID: 4, Layer: wm.LayerFloating},
+	}
+	got := floatsToRaise(ps)
+	if len(got) != 2 || got[0] != 2 || got[1] != 4 {
+		t.Errorf("floatsToRaise = %v, want [2 4] (bottom to top, visible only)", got)
+	}
+}

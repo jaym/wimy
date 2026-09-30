@@ -704,3 +704,49 @@ func TestSpreadColumnsNamedView(t *testing.T) {
 		t.Errorf("view 1 has %d columns, want it untouched", n)
 	}
 }
+
+func TestToggleFullscreen(t *testing.T) {
+	s := newTestState(t)
+	s.TitlebarHeight = 22
+	s.AddWindow(2, false)
+	s.MoveDir(DirRight) // 1 | 2, focus on 2
+	s.ToggleFullscreen()
+
+	ps := placements(s)
+	want := Rect{X: 0, Y: 0, W: 1280, H: 720}
+	if p := ps[2]; p.Rect != want || p.Bar || !p.Fullscreen || p.Hidden {
+		t.Errorf("fullscreen placement = %+v, want the whole tiling area %+v, no titlebar", p, want)
+	}
+	if !ps[1].Hidden {
+		t.Errorf("other window of the view not hidden behind the fullscreen one: %+v", ps[1])
+	}
+
+	s.ToggleFullscreen()
+	if ps := placements(s); ps[2].Fullscreen || ps[1].Hidden {
+		t.Errorf("toggling again did not restore the layout: %+v %+v", ps[1], ps[2])
+	}
+}
+
+func TestFullscreenSuspendedWhileUnfocused(t *testing.T) {
+	s := newTestState(t)
+	s.AddWindow(2, false)
+	s.MoveDir(DirRight)
+	s.ToggleFullscreen()
+	s.FocusDir(DirLeft) // focus window 1
+	if ps := placements(s); ps[2].Fullscreen || ps[1].Hidden {
+		t.Errorf("fullscreen kept after focus moved away: %+v %+v", ps[1], ps[2])
+	}
+	s.FocusDir(DirRight)
+	if ps := placements(s); !ps[2].Fullscreen {
+		t.Errorf("fullscreen not back when its window is focused again: %+v", ps[2])
+	}
+}
+
+func TestFullscreenUsesUsableArea(t *testing.T) {
+	s := newTestState(t)
+	s.SetOutputUsable("HDMI-A-1", 0, 37, 1280, 683)
+	s.ToggleFullscreen()
+	if p := placements(s)[1]; p.Rect != (Rect{X: 0, Y: 37, W: 1280, H: 683}) {
+		t.Errorf("fullscreen rect = %+v, want the usable area (bars stay visible)", p.Rect)
+	}
+}

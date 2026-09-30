@@ -106,3 +106,21 @@ func TestViewPromptChoices(t *testing.T) {
 		t.Fatalf("choices: %v", fx.promptChoices)
 	}
 }
+
+func TestFullscreenCommand(t *testing.T) {
+	env, _ := newTestEnv()
+	env.State.AddWindow(1, false)
+	r := New(env)
+	if err := r.Run("fullscreen"); err != nil {
+		t.Fatal(err)
+	}
+	var fs bool
+	for _, p := range env.State.Layout() {
+		if p.ID == 1 {
+			fs = p.Fullscreen
+		}
+	}
+	if !fs {
+		t.Errorf("fullscreen command did not make the focused window fullscreen")
+	}
+}

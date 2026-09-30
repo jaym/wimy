@@ -1,0 +1,52 @@
+name: release
+# A pushed tag vX.Y.Z builds Wimy.app, signs it with the wimy-dev identity
+# (the same one local builds use, so every build shares one Accessibility
+# grant) and publishes it on the GitHub release. Nix installs that zip.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # create the release
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    # the signing secrets live in this environment; its protection rules
+    # (required reviewer) gate every signed build
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Test
+        run: go vet ./... && go test ./...
+      - name: Import the signing identity
+        env:
+          WIMY_SIGNING_P12: ${{ secrets.WIMY_SIGNING_P12 }}
+          WIMY_SIGNING_P12_PASSWORD: ${{ secrets.WIMY_SIGNING_P12_PASSWORD }}
+        run: contrib/macos/ci-import-identity.sh
+      - name: Build and sign Wimy.app
+        run: |
+          make mac-app VERSION="$GITHUB_REF_NAME"
+          codesign --verify --strict --verbose=2 bin/Wimy.app
+          codesign -d -r- bin/Wimy.app
+      - name: Package
+        id: pkg
+        run: |
+          zip="Wimy-${GITHUB_REF_NAME#v}-arm64.zip"
+          ditto -c -k --keepParent bin/Wimy.app "$zip"
+          shasum -a 256 "$zip" > "$zip.sha256"
+          echo "zip=$zip" >> "$GITHUB_OUTPUT"
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes \
+            "${{ steps.pkg.outputs.zip }}" "${{ steps.pkg.outputs.zip }}.sha256"
+      - name: Remove the signing keychain
+        if: always()
+        run: contrib/macos/ci-import-identity.sh cleanup

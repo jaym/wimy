@@ -21,6 +21,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 
 	"wimy/internal/wm"
 )
@@ -75,19 +76,20 @@ const (
 // SocketPath returns the socket path for the current session:
 // $WIMY_SOCKET if set, else $XDG_RUNTIME_DIR/wimy-$WAYLAND_DISPLAY.sock
 // (falling back to the temp dir and wayland-0). On macOS, which has no
-// Wayland display, it is $TMPDIR/wimy.sock; launchd gives every agent
-// of a user the same $TMPDIR, so wimyctl and the daemon agree.
+// Wayland display, it is /tmp/wimy-<uid>/wimy.sock: a fixed per-user
+// directory like tmux's, because launchd agents (a SketchyBar plugin)
+// get no $TMPDIR and would otherwise look elsewhere.
 func SocketPath() string {
-	return socketPath(runtime.GOOS, os.Getenv, os.TempDir())
+	return socketPath(runtime.GOOS, os.Getenv, os.TempDir(), os.Getuid())
 }
 
-func socketPath(goos string, getenv func(string) string, tmp string) string {
+func socketPath(goos string, getenv func(string) string, tmp string, uid int) string {
 	if p := getenv("WIMY_SOCKET"); p != "" {
 		return p
 	}
 	disp := getenv("WAYLAND_DISPLAY")
 	if disp == "" && goos == "darwin" {
-		return filepath.Join(tmp, "wimy.sock")
+		return filepath.Join("/tmp", fmt.Sprintf("wimy-%d", uid), "wimy.sock")
 	}
 	if disp == "" {
 		disp = "wayland-0"
@@ -123,6 +125,11 @@ type client struct {
 // Listen creates the socket and starts serving.
 func Listen(b Backend) (*Server, error) {
 	path := SocketPath()
+	if runtime.GOOS == "darwin" && os.Getenv("WIMY_SOCKET") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
+		if err := prepareSocketDir(filepath.Dir(path)); err != nil {
+			return nil, err
+		}
+	}
 	if err := os.RemoveAll(path); err != nil {
 		return nil, err
 	}
@@ -140,6 +147,24 @@ func Listen(b Backend) (*Server, error) {
 	go s.acceptLoop()
 	go s.broadcastLoop()
 	return s, nil
+}
+
+// prepareSocketDir creates the socket's directory if needed and
+// refuses one that isn't a private directory of this user: the socket
+// accepts commands, so nobody else may create or replace it.
+func prepareSocketDir(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	fi, err := os.Lstat(dir)
+	if err != nil {
+		return err
+	}
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	if !fi.IsDir() || fi.Mode().Perm()&0o077 != 0 || (ok && int(st.Uid) != os.Getuid()) {
+		return fmt.Errorf("socket directory %s must be a directory private to this user (mode 0700)", dir)
+	}
+	return nil
 }
 
 // Path returns the socket path.

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Template: `make mac-app` fills in @VERSION@. -->
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>io.github.jaym.wimy</string>
+	<key>CFBundleName</key>
+	<string>Wimy</string>
+	<key>CFBundleDisplayName</key>
+	<string>Wimy</string>
+	<key>CFBundleExecutable</key>
+	<string>wimy</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>@VERSION@</string>
+	<key>CFBundleVersion</key>
+	<string>@VERSION@</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<!-- no Dock icon, no app menu: wimy lives in the menu bar item -->
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>wimy, a wmii-style tiling window manager</string>
+</dict>
+</plist>

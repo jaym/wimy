@@ -4,6 +4,9 @@
 
 VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS  := -X main.version=$(VERSION)
+# CFBundleVersion must be numbers and dots: the tag without its "v"
+# for releases (v0.1.0 -> 0.1.0), 0.0.0 otherwise
+BUNDLE_VERSION := $(shell echo '$(VERSION)' | sed -nE 's/^v?([0-9]+(\.[0-9]+){0,2})$$/\1/p' | grep . || echo 0.0.0)
 
 # macOS app bundle
 APP      := bin/Wimy.app
@@ -29,7 +32,8 @@ test:
 mac-app: build
 	rm -rf $(APP)
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources $(APP)/Contents/Library/LaunchAgents
-	sed 's/@VERSION@/$(VERSION)/g' contrib/macos/Wimy.app/Contents/Info.plist > $(APP)/Contents/Info.plist
+	sed -e 's|@VERSION@|$(VERSION)|' -e 's|@BUNDLE_VERSION@|$(BUNDLE_VERSION)|' \
+		contrib/macos/Wimy.app/Contents/Info.plist > $(APP)/Contents/Info.plist
 	cp contrib/macos/Wimy.app/Contents/Library/LaunchAgents/$(BUNDLE_ID).plist $(APP)/Contents/Library/LaunchAgents/
 	cp bin/wimy bin/wimyctl $(APP)/Contents/MacOS/
 	@if security find-identity -v -p codesigning | grep -q '"$(SIGN_ID)"'; then \

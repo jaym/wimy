@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- Template: `make mac-app` fills in @VERSION@. -->
+<!-- Template: `make mac-app` fills in @VERSION@ and @BUNDLE_VERSION@. -->
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
@@ -16,7 +16,7 @@
 	<key>CFBundleShortVersionString</key>
 	<string>@VERSION@</string>
 	<key>CFBundleVersion</key>
-	<string>@VERSION@</string>
+	<string>@BUNDLE_VERSION@</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>26.0</string>
 	<!-- no Dock icon, no app menu: wimy lives in the menu bar item -->

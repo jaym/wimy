@@ -211,6 +211,11 @@ go generate ./internal/proto
   a CGImage directly (`kCGBitmapByteOrder32Little |
   kCGImageAlphaPremultipliedFirst`); SF (`SFNS.ttf`) parses with
   x/image/opentype, `.ttc` collections don't.
+- macOS lets no third-party process keep one app's window above
+  another app's (yabai needs SIP disabled for that): `kAXRaiseAction`
+  only orders a window within its own app. So floating windows are not
+  kept above tiles on macOS (tried and removed), and they get no wimy
+  decoration.
 - One wimy focus request produces two notifications (AX focused-window
   changed, app activated); `focusEcho` treats all of them within 500ms
   as echoes, or quick Option-j presses bounce focus back.

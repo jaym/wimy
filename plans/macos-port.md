@@ -361,6 +361,10 @@ window, one frame panel per window sits *behind* it (border fill +
 titlebar), which also covers Tahoe's rounded corners, so no
 corner-radius matching was needed. Retiles with decorations: 3–19 ms
 per window.
+After the review: floating windows are undecorated (user's choice) and
+not kept above tiles (not possible without SIP; a kAXRaiseAction
+attempt only half worked and was removed); native fullscreen leaves the
+tiling; a model-level `fullscreen` toggle (Mod-f, both OSes) was added.
 
 - Borders as overlay panels driven from `Placement.Focused` and colors
   from config.

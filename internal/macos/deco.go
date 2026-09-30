@@ -108,17 +108,3 @@ func stripAnchor(ps []wm.Placement, strip wm.Placement) wm.WindowID {
 	}
 	return 0
 }
-
-// floatsToRaise returns the visible floating windows, bottom to top.
-// macOS has no window layers: focusing a tiled window raises its app
-// above the floating windows, so wimy raises them again afterwards to
-// keep them on top, as on Linux.
-func floatsToRaise(ps []wm.Placement) []wm.WindowID {
-	var out []wm.WindowID
-	for _, p := range ps {
-		if p.Layer == wm.LayerFloating && !p.Hidden {
-			out = append(out, p.ID)
-		}
-	}
-	return out
-}

@@ -52,12 +52,8 @@ type Backend struct {
 	scheduled bool                 // an apply pass is queued on the main queue
 	lastFocus wm.WindowID
 	echo      focusEcho
-	// raiseFloats: wimy focused a tiled window, whose app raises it over
-	// the floating windows; raise those again on the next pass that is
-	// at least decoReorderDelay later
-	raiseFloats time.Time
-	startup     bool // windows reported now were already open
-	notify      func()
+	startup   bool // windows reported now were already open
+	notify    func()
 
 	// Windows of views that aren't shown are parked in a hide corner.
 	// hidden maps each window wimy parked to its last on-screen frame,
@@ -345,13 +341,6 @@ func (b *Backend) apply() {
 	for _, p := range placements {
 		b.decorate(p, placements)
 	}
-	if !b.raiseFloats.IsZero() && time.Since(b.raiseFloats) >= decoReorderDelay*time.Millisecond {
-		b.raiseFloats = time.Time{}
-		for _, id := range floatsToRaise(placements) {
-			b.echo.sentApp(b.pids[id], time.Now()) // raising isn't a focus change
-			C.wimy_window_raise(C.uint32_t(id))
-		}
-	}
 
 	b.checkSecureInput()
 	switch f := b.State.Focused; {
@@ -359,11 +348,7 @@ func (b *Backend) apply() {
 		b.echo.sent(f, b.pids[f], time.Now())
 		C.wimy_window_focus(C.uint32_t(f))
 		// the app raises its window asynchronously; order the panels
-		// again once it has, or they stay under the windows it overlaps,
-		// and put floating windows back on top of a tiled one
-		if v := b.State.ActiveViewOf(f); v != nil && !v.FloatContains(f) {
-			b.raiseFloats = time.Now()
-		}
+		// again once it has, or they stay under the windows it overlaps
 		C.wimy_schedule_apply_after(decoReorderDelay)
 	case f == 0 && b.lastFocus != 0:
 		// an empty view: the window that had focus is parked (or gone)

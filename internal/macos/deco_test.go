@@ -133,16 +133,3 @@ func TestDecoFullscreenNone(t *testing.T) {
 		t.Errorf("fullscreen window decorated: %+v", d)
 	}
 }
-
-func TestFloatsToRaise(t *testing.T) {
-	ps := []wm.Placement{
-		{ID: 1, Layer: wm.LayerTiled},
-		{ID: 2, Layer: wm.LayerFloating},
-		{ID: 3, Layer: wm.LayerFloating, Hidden: true}, // other view
-		{ID: 4, Layer: wm.LayerFloating},
-	}
-	got := floatsToRaise(ps)
-	if len(got) != 2 || got[0] != 2 || got[1] != 4 {
-		t.Errorf("floatsToRaise = %v, want [2 4] (bottom to top, visible only)", got)
-	}
-}

@@ -327,7 +327,12 @@ Accessibility) for whatever starts it — for now the terminal you run
 - **Titlebars and borders:** every window gets wimy's titlebar and a
   border, drawn by a panel right behind the window, so apps keep their
   own titlebar too (the same double decoration as Firefox on Linux).
-  Clicking a titlebar focuses its window. In stack mode, collapsed
+  Clicking a titlebar focuses its window. Floating windows (dialogs,
+  utility windows) keep only their own titlebar, and — macOS has no
+  window layers a window manager may use — they can go behind tiled
+  windows; bring one back with a click, Cmd-Tab or Mod-space.
+  Mod-f toggles fullscreen: the focused window fills its screen below
+  the bar. In stack mode, collapsed
   windows are parked like hidden ones and only their titlebar strip
   shows; click it to expand the window. With `titlebar "off"`, windows
   get a border only and stack strips are `stack-strip` high.

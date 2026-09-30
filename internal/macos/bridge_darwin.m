@@ -564,11 +564,6 @@ int wimy_focus_none(void) {
 	}
 }
 
-void wimy_window_raise(uint32_t wid) {
-	int i = find_win(wid);
-	if (i >= 0) AXUIElementPerformAction(wins[i].el, kAXRaiseAction);
-}
-
 void wimy_window_close(uint32_t wid) {
 	int i = find_win(wid);
 	if (i < 0) return;

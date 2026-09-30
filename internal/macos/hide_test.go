@@ -28,12 +28,31 @@ func TestHidePositionAvoidsNeighbor(t *testing.T) {
 	}
 }
 
-func TestHidePositionBothCornersTaken(t *testing.T) {
+func TestHidePositionMiddleScreen(t *testing.T) {
+	// three screens in a row: both corners of the middle one are taken,
+	// so park in a free corner of another screen
 	left := wm.Rect{X: -1920, Y: 0, W: 1920, H: 1080}
 	right := wm.Rect{X: 1512, Y: 0, W: 1920, H: 1080}
-	x, y := hidePosition([]wm.Rect{laptop, left, right}, 0, 800, 600)
-	if x != 1511 || y != 981 {
-		t.Errorf("hide at %d,%d, want the bottom-right fallback", x, y)
+	screens := []wm.Rect{laptop, left, right}
+	x, y := hidePosition(screens, 0, 800, 600)
+	spot := wm.Rect{X: x, Y: y - maxClamp, W: 800, H: 600 + maxClamp}
+	for i, s := range screens {
+		if intersects(s, spot) && !(x == s.X+s.W-1 || x == s.X-800+1) {
+			t.Errorf("parked at %d,%d overlaps screen %d (%+v)", x, y, i, s)
+		}
+	}
+	if !inHideCorner(screens, wm.Rect{X: x, Y: y, W: 800, H: 600}) {
+		t.Errorf("parking spot %d,%d not recognized as a hide corner", x, y)
+	}
+}
+
+func TestHidePositionClampReachesNeighbor(t *testing.T) {
+	// the right neighbor ends 20pt above the laptop's bottom edge: the
+	// unclamped spot misses it, but macOS pushes the window up into it
+	right := wm.Rect{X: 1512, Y: 0, W: 1920, H: 962}
+	x, y := hidePosition([]wm.Rect{laptop, right}, 0, 800, 600)
+	if x != -799 || y != 981 {
+		t.Errorf("hide at %d,%d, want bottom-left -799,981", x, y)
 	}
 }
 
@@ -69,5 +88,36 @@ func TestInHideCornerAfterMacOSClamp(t *testing.T) {
 	}
 	if inHideCorner(screens, wm.Rect{X: 100, Y: 942, W: 504, H: 40}) {
 		t.Errorf("ordinary window near the bottom edge taken for parked")
+	}
+}
+
+func TestOnScreenKeepsVisibleFrame(t *testing.T) {
+	outs := outputsFor(twoScreens(0), 37)
+	r := wm.Rect{X: 2000, Y: 100, W: 600, H: 400} // on the BenQ
+	if got := onScreen(outs, r); got != r {
+		t.Errorf("frame on a connected screen moved to %+v", got)
+	}
+}
+
+func TestOnScreenScreenGone(t *testing.T) {
+	// parked while docked; the BenQ has since been unplugged
+	laptopOnly := outputsFor(twoScreens(0)[:1], 37)
+	r := wm.Rect{X: 2000, Y: 100, W: 600, H: 400}
+	want := centeredIn(laptopOnly[0].Usable, 600, 400)
+	if got := onScreen(laptopOnly, r); got != want {
+		t.Errorf("frame on an unplugged screen = %+v, want %+v on the primary screen", got, want)
+	}
+}
+
+func TestBackOnScreen(t *testing.T) {
+	screens := []wm.Rect{laptop}
+	if !backOnScreen(screens, wm.Rect{X: 0, Y: 37, W: 700, H: 900}, true) {
+		t.Errorf("window in the layout not confirmed")
+	}
+	if backOnScreen(screens, wm.Rect{X: 1511, Y: 942, W: 700, H: 900}, true) {
+		t.Errorf("window still in the hide corner confirmed")
+	}
+	if backOnScreen(screens, wm.Rect{}, false) {
+		t.Errorf("unreadable frame confirmed")
 	}
 }

@@ -11,7 +11,9 @@ import (
 
 // hiddenStore persists the last on-screen frame of every window wimy
 // has parked in a hide corner, so a wimy that died (SIGKILL, crash in
-// C) can put them back on its next start.
+// C) can put them back on its next start. Entries are tagged with the
+// boot time: window IDs start over after a reboot, so entries from
+// another boot would match unrelated windows.
 type hiddenStore struct{ path string }
 
 type storedWindow struct {
@@ -19,8 +21,9 @@ type storedWindow struct {
 	Rect wm.Rect     `json:"rect"`
 }
 
-// save writes m atomically; an empty m removes the file.
-func (s hiddenStore) save(m map[wm.WindowID]wm.Rect) error {
+// save writes m atomically for the given boot; an empty m removes the
+// file.
+func (s hiddenStore) save(m map[wm.WindowID]wm.Rect, boot int64) error {
 	if len(m) == 0 {
 		if err := os.Remove(s.path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
@@ -31,9 +34,7 @@ func (s hiddenStore) save(m map[wm.WindowID]wm.Rect) error {
 	for id, r := range m {
 		list = append(list, storedWindow{ID: id, Rect: r})
 	}
-	data, err := json.Marshal(struct {
-		Windows []storedWindow `json:"windows"`
-	}{list})
+	data, err := json.Marshal(storeDoc{Boot: boot, Windows: list})
 	if err != nil {
 		return err
 	}
@@ -47,8 +48,14 @@ func (s hiddenStore) save(m map[wm.WindowID]wm.Rect) error {
 	return os.Rename(tmp, s.path)
 }
 
-// load reads the store; a missing file is an empty store.
-func (s hiddenStore) load() (map[wm.WindowID]wm.Rect, error) {
+type storeDoc struct {
+	Boot    int64          `json:"boot"`
+	Windows []storedWindow `json:"windows"`
+}
+
+// load reads the store; a missing file, or one from another boot, is
+// an empty store.
+func (s hiddenStore) load(boot int64) (map[wm.WindowID]wm.Rect, error) {
 	data, err := os.ReadFile(s.path)
 	if errors.Is(err, os.ErrNotExist) {
 		return map[wm.WindowID]wm.Rect{}, nil
@@ -56,11 +63,12 @@ func (s hiddenStore) load() (map[wm.WindowID]wm.Rect, error) {
 	if err != nil {
 		return nil, err
 	}
-	var doc struct {
-		Windows []storedWindow `json:"windows"`
-	}
+	var doc storeDoc
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return nil, err
+	}
+	if doc.Boot != boot {
+		return map[wm.WindowID]wm.Rect{}, nil
 	}
 	m := make(map[wm.WindowID]wm.Rect, len(doc.Windows))
 	for _, w := range doc.Windows {

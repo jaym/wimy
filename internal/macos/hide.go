@@ -8,21 +8,31 @@ import "wimy/internal/wm"
 // screen (macOS clamps windows that would leave it entirely).
 
 // hidePosition returns the top-left corner at which a w×h window is
-// parked on screen si: the bottom-right corner, or the bottom-left one
-// when the window would reach into a neighboring screen there. If both
-// would, bottom-right.
+// parked: 1pt from the bottom-right or bottom-left corner of screen si,
+// or, when both would reach into a neighboring screen (a screen in the
+// middle of a row), a free bottom corner of another screen. macOS
+// pushes a window parked at the bottom edge up by as much as maxClamp,
+// so a spot counts as free only if the window, extended that far up,
+// touches no other screen. If no spot is free, bottom-right of si.
 func hidePosition(screens []wm.Rect, si int, w, h int32) (x, y int32) {
+	order := []int{si}
+	for i := range screens {
+		if i != si {
+			order = append(order, i)
+		}
+	}
+	for _, i := range order {
+		s := screens[i]
+		y := s.Y + s.H - 1
+		for _, x := range []int32{s.X + s.W - 1, s.X - w + 1} {
+			reach := wm.Rect{X: x, Y: y - maxClamp, W: w, H: h + maxClamp}
+			if !overlapsOther(screens, i, reach) {
+				return x, y
+			}
+		}
+	}
 	s := screens[si]
-	y = s.Y + s.H - 1
-	right := wm.Rect{X: s.X + s.W - 1, Y: y, W: w, H: h}
-	if !overlapsOther(screens, si, right) {
-		return right.X, y
-	}
-	left := wm.Rect{X: s.X - w + 1, Y: y, W: w, H: h}
-	if !overlapsOther(screens, si, left) {
-		return left.X, y
-	}
-	return right.X, y
+	return s.X + s.W - 1, s.Y + s.H - 1
 }
 
 func overlapsOther(screens []wm.Rect, si int, r wm.Rect) bool {
@@ -67,4 +77,30 @@ func inHideCorner(screens []wm.Rect, r wm.Rect) bool {
 func centeredIn(area wm.Rect, w, h int32) wm.Rect {
 	w, h = min(w, area.W), min(h, area.H)
 	return wm.Rect{X: area.X + (area.W-w)/2, Y: area.Y + (area.H-h)/2, W: w, H: h}
+}
+
+// onScreen returns r if its centre is on a connected screen, else r's
+// size centred on the primary screen's usable area: the frame a parked
+// window was recorded with may be on a screen that has since been
+// unplugged.
+func onScreen(outs []outputSpec, r wm.Rect) wm.Rect {
+	if len(outs) == 0 {
+		return r
+	}
+	cx, cy := r.X+r.W/2, r.Y+r.H/2
+	for _, o := range outs {
+		f := o.Full
+		if cx >= f.X && cx < f.X+f.W && cy >= f.Y && cy < f.Y+f.H {
+			return r
+		}
+	}
+	return centeredIn(outs[0].Usable, r.W, r.H)
+}
+
+// backOnScreen reports whether a window wimy is showing again really
+// left its hide corner: only then may its saved frame be forgotten. A
+// show that fails (or an app that refuses) must not drop it from the
+// store while it still sits in the corner.
+func backOnScreen(screens []wm.Rect, got wm.Rect, readable bool) bool {
+	return readable && !inHideCorner(screens, got)
 }

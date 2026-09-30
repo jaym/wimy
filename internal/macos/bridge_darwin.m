@@ -166,7 +166,7 @@ static void observer_cb(AXObserverRef obs, AXUIElementRef el, CFStringRef note, 
 		track_window(pid, el);
 	} else if (CFEqual(note, kAXFocusedWindowChangedNotification)) {
 		int i = find_el(el);
-		if (i >= 0) goFocusChanged(wins[i].wid);
+		if (i >= 0) goFocusChanged(wins[i].wid, wins[i].pid);
 	} else if (CFEqual(note, kAXWindowMiniaturizedNotification)) {
 		int i = find_el(el);
 		if (i >= 0) goWindowGone(wins[i].wid);
@@ -329,7 +329,7 @@ void wimy_start_tracking(void) {
 		            NSRunningApplication *app = n.userInfo[NSWorkspaceApplicationKey];
 		            watch_app(app);
 		            uint32_t wid = focused_wid(app.processIdentifier);
-		            if (wid) goFocusChanged(wid);
+		            if (wid) goFocusChanged(wid, app.processIdentifier);
 	            }];
 	[wc addObserverForName:NSWorkspaceDidHideApplicationNotification object:nil queue:[NSOperationQueue mainQueue]
 	            usingBlock:^(NSNotification *n) {
@@ -527,6 +527,20 @@ void wimy_window_focus(uint32_t wid) {
 	AXUIElementPerformAction(wins[i].el, kAXRaiseAction);
 	AXUIElementSetAttributeValue(wins[i].el, kAXMainAttribute, kCFBooleanTrue);
 	[[NSRunningApplication runningApplicationWithProcessIdentifier:wins[i].pid] activateWithOptions:0];
+}
+
+// wimy_focus_none takes keyboard focus off every window, as clicking the
+// desktop does, by activating Finder: after switching to an empty view
+// the previously focused window sits parked in a corner and must not
+// receive keystrokes. Returns Finder's pid (0 if it isn't running).
+int wimy_focus_none(void) {
+	@autoreleasepool {
+		NSArray *finders = [NSRunningApplication runningApplicationsWithBundleIdentifier:@"com.apple.finder"];
+		NSRunningApplication *finder = finders.firstObject;
+		if (!finder) return 0;
+		[finder activateWithOptions:0];
+		return finder.processIdentifier;
+	}
 }
 
 void wimy_window_close(uint32_t wid) {

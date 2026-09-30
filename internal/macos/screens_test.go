@@ -74,3 +74,45 @@ func TestOutputAt(t *testing.T) {
 		t.Errorf("window off every screen -> output %d, want 0", i)
 	}
 }
+
+func dells() []screenInfo {
+	s := twoScreens(0)
+	s[0].Name, s[1].Name = "DELL", "DELL"
+	return s
+}
+
+func TestKeepNamesAcrossReorder(t *testing.T) {
+	prev := outputsFor(dells(), 0) // d1 "DELL", d2 "DELL (2)"
+	s := dells()
+	s[0], s[1] = s[1], s[0] // the primary display changed: d2 enumerates first
+	next := keepNames(prev, outputsFor(s, 0))
+	names := map[uint32]string{}
+	for _, o := range next {
+		names[o.Display] = o.Name
+	}
+	if names[1] != "DELL" || names[2] != "DELL (2)" {
+		t.Errorf("names after reorder = %v, want d1 DELL, d2 DELL (2)", names)
+	}
+}
+
+func TestKeepNamesNewIdenticalScreen(t *testing.T) {
+	one := dells()[:1]
+	prev := outputsFor(one, 0) // d1 "DELL"
+	third := screenInfo{Name: "DELL", Display: 3, Frame: Frame{-1920, 0, 1920, 1080}, Visible: Frame{-1920, 0, 1920, 1080}}
+	next := keepNames(prev, outputsFor([]screenInfo{third, one[0]}, 0)) // d3 enumerates first
+	names := map[uint32]string{}
+	for _, o := range next {
+		names[o.Display] = o.Name
+	}
+	if names[1] != "DELL" || names[3] != "DELL (2)" {
+		t.Errorf("names = %v, want d1 keeps DELL, new d3 DELL (2)", names)
+	}
+}
+
+func TestKeepNamesReusesFreedName(t *testing.T) {
+	prev := outputsFor(dells(), 0)
+	next := keepNames(prev, outputsFor(dells()[1:], 0)) // d1 unplugged
+	if len(next) != 1 || next[0].Name != "DELL (2)" {
+		t.Errorf("remaining screen = %+v, want it to keep DELL (2)", next)
+	}
+}

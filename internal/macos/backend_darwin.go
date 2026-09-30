@@ -18,6 +18,8 @@ import (
 	"runtime/cgo"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"wimy/internal/backend"
 	"wimy/internal/config"
 	"wimy/internal/wm"
@@ -51,14 +53,20 @@ type Backend struct {
 	notify    func()
 
 	// Windows of views that aren't shown are parked in a hide corner.
-	// hidden maps each parked window to its last on-screen frame; the
-	// store persists it (together with restore, the parked windows a
+	// hidden maps each window wimy parked to its last on-screen frame,
+	// until the window is confirmed back on screen (a show can fail);
+	// parked holds the ones sitting in the corner right now. The store
+	// persists hidden (together with restore, the parked windows a
 	// previous wimy left behind and that haven't been seen yet) so no
 	// window is ever lost.
 	hidden    map[wm.WindowID]wm.Rect
+	parked    map[wm.WindowID]bool
 	restore   map[wm.WindowID]wm.Rect
 	lastShown map[wm.WindowID]wm.Rect
 	store     hiddenStore
+	boot      int64 // boot time, tags the store (window IDs restart after a reboot)
+
+	pids map[wm.WindowID]int // owning app of each window in the model
 
 	// away remembers the views (tags) of minimized windows, so a
 	// restored window returns to them instead of the focused view.
@@ -76,9 +84,11 @@ func New(cfg *config.Config, configArg string, notify func()) *Backend {
 		applied:   newFrames(),
 		known:     make(map[wm.WindowID]bool),
 		hidden:    make(map[wm.WindowID]wm.Rect),
+		parked:    make(map[wm.WindowID]bool),
 		restore:   make(map[wm.WindowID]wm.Rect),
 		lastShown: make(map[wm.WindowID]wm.Rect),
 		away:      make(map[wm.WindowID][]string),
+		pids:      make(map[wm.WindowID]int),
 		notify:    notify,
 	}
 	b.Core = backend.NewCore(cfg, configArg, b)
@@ -145,7 +155,10 @@ func (b *Backend) Run(ctx context.Context) error {
 	}
 	C.wimy_app_init()
 	b.store = hiddenStore{path: filepath.Join(stateDir(os.Getenv, homeDir()), "hidden.json")}
-	if m, err := b.store.load(); err != nil {
+	if tv, err := unix.SysctlTimeval("kern.boottime"); err == nil {
+		b.boot = tv.Sec
+	}
+	if m, err := b.store.load(b.boot); err != nil {
 		log.Printf("hidden-window store %s: %v (ignored)", b.store.path, err)
 	} else {
 		b.restore = m
@@ -155,6 +168,13 @@ func (b *Backend) Run(ctx context.Context) error {
 	b.startup = true
 	C.wimy_start_tracking()
 	b.startup = false
+	// windows a previous wimy parked that aren't open now: forget them
+	// (apps that come up later and left a window in a corner are still
+	// caught by inHideCorner)
+	if len(b.restore) > 0 {
+		clear(b.restore)
+		b.saveHidden()
+	}
 	// the windows already open would otherwise all stack in one
 	// column per view (new windows join the focused column, as in wmii)
 	for _, o := range b.outputs {
@@ -274,17 +294,15 @@ func (b *Backend) apply() {
 	b.State.TitlebarHeight = 0
 
 	var moved []wm.Placement
-	shown := false
 	start := time.Now()
 	for _, p := range b.State.Layout() {
 		if p.Hidden {
 			b.hide(p.ID)
 			continue
 		}
-		if _, parked := b.hidden[p.ID]; parked {
-			delete(b.hidden, p.ID)
-			shown = true
-		}
+		// a parked window being shown keeps its saved frame until
+		// checkFrames confirms it left the corner
+		delete(b.parked, p.ID)
 		b.lastShown[p.ID] = p.Rect
 		if !b.applied.changed(p.ID, p.Rect) {
 			continue
@@ -297,9 +315,6 @@ func (b *Backend) apply() {
 		}
 		moved = append(moved, p)
 	}
-	if shown {
-		b.saveHidden()
-	}
 	if len(moved) > 0 {
 		elapsed := time.Since(start)
 		log.Printf("retile: %d windows in %s (%s per window)", len(moved),
@@ -308,9 +323,16 @@ func (b *Backend) apply() {
 	}
 
 	b.checkSecureInput()
-	if f := b.State.Focused; f != 0 && f != b.lastFocus {
-		b.echo.sent(f, time.Now())
+	switch f := b.State.Focused; {
+	case f != 0 && f != b.lastFocus:
+		b.echo.sent(f, b.pids[f], time.Now())
 		C.wimy_window_focus(C.uint32_t(f))
+	case f == 0 && b.lastFocus != 0:
+		// an empty view: the window that had focus is parked (or gone)
+		// and must not keep taking keystrokes
+		if pid := int(C.wimy_focus_none()); pid != 0 {
+			b.echo.sentApp(pid, time.Now())
+		}
 	}
 	b.lastFocus = b.State.Focused
 	if b.notify != nil {
@@ -327,11 +349,15 @@ const frameRetryDelay = 200 // ms
 // creation, AX was busy, or it has a minimum size) gets its frame
 // re-sent a bounded number of times; the rest is logged.
 func (b *Backend) checkFrames(ps []wm.Placement) {
-	retry := false
+	retry, confirmed := false, false
 	for _, p := range ps {
 		var f C.wimy_rect
 		ok := C.wimy_window_frame(C.uint32_t(p.ID), &f) == 0
 		got := wm.Rect{X: int32(f.x), Y: int32(f.y), W: int32(f.w), H: int32(f.h)}
+		if _, saved := b.hidden[p.ID]; saved && !b.parked[p.ID] && backOnScreen(b.screenRects(), got, ok) {
+			delete(b.hidden, p.ID)
+			confirmed = true
+		}
 		if ok && sameFrame(got, p.Rect) {
 			b.applied.matched(p.ID)
 			continue
@@ -348,15 +374,18 @@ func (b *Backend) checkFrames(ps []wm.Placement) {
 			log.Printf("window %d (%s) is %+v, wanted %+v", p.ID, app, got, p.Rect)
 		}
 	}
+	if confirmed {
+		b.saveHidden()
+	}
 	if retry {
 		C.wimy_schedule_apply_after(frameRetryDelay)
 	}
 }
 
 // syncScreens makes every screen an output, matching screens across
-// changes by display ID: new screens are added, renamed ones renamed,
-// unplugged ones removed (their views stay, wm collects them when
-// empty).
+// changes by display ID: a connected screen keeps its output name (see
+// keepNames), new screens are added, unplugged ones removed (their
+// views stay, wm collects them when empty).
 func (b *Backend) syncScreens() {
 	var buf [16]C.wimy_screen
 	n := int(C.wimy_screens(&buf[0], C.int(len(buf))))
@@ -369,10 +398,10 @@ func (b *Backend) syncScreens() {
 		screens[i] = screenInfo{Frame: frameOf(s.frame), Visible: frameOf(s.visible),
 			Display: uint32(s.display), Name: C.GoString(&s.name[0])}
 	}
-	outs := outputsFor(screens, b.Cfg.BarGap)
-	prev := make(map[uint32]string, len(b.outputs))
+	outs := keepNames(b.outputs, outputsFor(screens, b.Cfg.BarGap))
+	prev := make(map[uint32]bool, len(b.outputs))
 	for _, o := range b.outputs {
-		prev[o.Display] = o.Name
+		prev[o.Display] = true
 	}
 	still := make(map[uint32]bool, len(outs))
 	for _, o := range outs {
@@ -384,10 +413,8 @@ func (b *Backend) syncScreens() {
 		}
 	}
 	for _, o := range outs {
-		if old, ok := prev[o.Display]; !ok {
+		if !prev[o.Display] {
 			b.State.AddOutput(o.Name)
-		} else if old != o.Name {
-			b.State.RenameOutput(old, o.Name)
 		}
 		b.State.SetOutputGeometry(o.Name, o.Full.X, o.Full.Y, o.Full.W, o.Full.H)
 		b.State.SetOutputUsable(o.Name, o.Usable.X, o.Usable.Y, o.Usable.W, o.Usable.H)
@@ -432,7 +459,7 @@ func (b *Backend) setFrame(id wm.WindowID, r wm.Rect) {
 // recorded and saved before it moves, so a crash right after can
 // still put it back.
 func (b *Backend) hide(id wm.WindowID) {
-	if _, parked := b.hidden[id]; parked {
+	if b.parked[id] {
 		return
 	}
 	cur, ok := b.frame(id)
@@ -447,6 +474,7 @@ func (b *Backend) hide(id wm.WindowID) {
 		cur = last
 	}
 	b.hidden[id] = last
+	b.parked[id] = true
 	b.saveHidden()
 	b.park(id, last, cur.W, cur.H)
 	b.applied.forget(id)
@@ -467,9 +495,10 @@ func (b *Backend) park(id wm.WindowID, last wm.Rect, w, h int32) {
 // unhideAll puts every parked window back where it was.
 func (b *Backend) unhideAll() {
 	for id, r := range b.hidden {
-		b.setFrame(id, r)
+		b.setFrame(id, onScreen(b.outputs, r))
 	}
 	clear(b.hidden)
+	clear(b.parked)
 	b.saveHidden()
 }
 
@@ -486,7 +515,7 @@ func (b *Backend) saveHidden() {
 	for id, r := range b.hidden {
 		m[id] = r
 	}
-	if err := b.store.save(m); err != nil {
+	if err := b.store.save(m, b.boot); err != nil {
 		log.Printf("hidden-window store %s: %v", b.store.path, err)
 	}
 }
@@ -501,7 +530,8 @@ func goScreensChanged() {
 	defer b.guard()
 	b.syncScreens()
 	// a changed arrangement can put a parked window on screen
-	for id, last := range b.hidden {
+	for id := range b.parked {
+		last := b.hidden[id]
 		if cur, ok := b.frame(id); ok {
 			b.park(id, last, cur.W, cur.H)
 		}
@@ -512,6 +542,7 @@ func goScreensChanged() {
 //export goWindowAdded
 func goWindowAdded(wid C.uint32_t, pid C.int, bundle, title, subrole *C.char, hasZoom, minimized C.int) {
 	defer current.guard()
+	current.pids[wm.WindowID(wid)] = int(pid)
 	current.windowAdded(wm.WindowID(wid), C.GoString(bundle), C.GoString(title), C.GoString(subrole),
 		hasZoom != 0, minimized != 0)
 }
@@ -526,6 +557,7 @@ func (b *Backend) windowAdded(id wm.WindowID, bundle, title, subrole string, has
 	b.known[id] = true
 	cur, ok := b.frame(id)
 	if r, pending := b.restore[id]; pending {
+		r = onScreen(b.outputs, r)
 		b.setFrame(id, r)
 		cur, ok = r, true
 		delete(b.restore, id)
@@ -571,11 +603,12 @@ func (b *Backend) dropWindow(id wm.WindowID, exists bool) {
 	}
 	if r, parked := b.hidden[id]; parked {
 		if exists {
-			b.setFrame(id, r)
+			b.setFrame(id, onScreen(b.outputs, r))
 		}
 		delete(b.hidden, id)
 		b.saveHidden()
 	}
+	delete(b.parked, id)
 	delete(b.lastShown, id)
 	b.applied.forget(id)
 	b.State.RemoveWindow(id)
@@ -586,6 +619,7 @@ func (b *Backend) dropWindow(id wm.WindowID, exists bool) {
 func goWindowRemoved(wid C.uint32_t) {
 	defer current.guard()
 	current.dropWindow(wm.WindowID(wid), false)
+	delete(current.pids, wm.WindowID(wid))
 }
 
 // goWindowGone: the window still exists but leaves the tiling
@@ -603,10 +637,10 @@ func goWindowGone(wid C.uint32_t) {
 // selected (wm.FocusWindow does that).
 //
 //export goFocusChanged
-func goFocusChanged(wid C.uint32_t) {
+func goFocusChanged(wid C.uint32_t, pid C.int) {
 	b, id := current, wm.WindowID(wid)
 	defer b.guard()
-	if !b.known[id] || id == b.State.Focused || b.echo.isEcho(id, time.Now()) {
+	if !b.known[id] || id == b.State.Focused || b.echo.isEcho(id, int(pid), time.Now()) {
 		return
 	}
 	b.State.FocusWindow(id)

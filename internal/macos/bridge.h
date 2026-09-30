@@ -37,6 +37,7 @@ int wimy_window_frame(uint32_t wid, wimy_rect *out); // AX coordinates (top-left
 int wimy_window_set_position(uint32_t wid, double x, double y); // 0 or the AXError
 uint32_t wimy_focused_window(void); // frontmost app's focused tracked window, or 0
 void wimy_start_secure_input_poll(void); // goSecureInputTick every 2s
+int wimy_focus_none(void); // activate Finder (keys go nowhere); returns its pid or 0
 // Returns 0 on success; the AXError of the position and final size
 // calls go to *perr and *serr (apps sometimes report an error for a
 // frame they did apply, so callers check by reading the frame back).

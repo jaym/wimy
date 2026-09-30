@@ -17,6 +17,7 @@ type screenInfo struct {
 // outputSpec is a screen as a model output, in model coordinates.
 type outputSpec struct {
 	Name    string
+	base    string // name before de-duplication
 	Display uint32
 	Full    wm.Rect
 	Usable  wm.Rect
@@ -36,10 +37,11 @@ func outputsFor(screens []screenInfo, barGap int32) []outputSpec {
 	seen := make(map[string]int)
 	outs := make([]outputSpec, 0, len(screens))
 	for _, s := range screens {
-		name := s.Name
-		if name == "" {
-			name = fmt.Sprintf("display-%d", s.Display)
+		base := s.Name
+		if base == "" {
+			base = fmt.Sprintf("display-%d", s.Display)
 		}
+		name := base
 		seen[name]++
 		if n := seen[name]; n > 1 {
 			name = fmt.Sprintf("%s (%d)", name, n)
@@ -50,7 +52,7 @@ func outputsFor(screens []screenInfo, barGap int32) []outputSpec {
 			usable.H -= top - usable.Y
 			usable.Y = top
 		}
-		outs = append(outs, outputSpec{Name: name, Display: s.Display, Full: full, Usable: usable})
+		outs = append(outs, outputSpec{Name: name, base: base, Display: s.Display, Full: full, Usable: usable})
 	}
 	return outs
 }
@@ -66,4 +68,38 @@ func outputAt(outs []outputSpec, r wm.Rect) int {
 		}
 	}
 	return 0
+}
+
+// keepNames renames outs so every screen that was already connected
+// (in prev, matched by display ID) keeps its output name, and newly
+// connected screens get their base name, or "base (n)" when that is
+// taken. Names from outputsFor alone depend on NSScreen order, which
+// changes (another primary display, a new identical monitor listed
+// first); renaming live outputs then would collide.
+func keepNames(prev, outs []outputSpec) []outputSpec {
+	had := make(map[uint32]string, len(prev))
+	for _, o := range prev {
+		had[o.Display] = o.Name
+	}
+	used := make(map[string]bool)
+	next := make([]outputSpec, len(outs))
+	for i, o := range outs {
+		if name, ok := had[o.Display]; ok {
+			o.Name = name
+			used[name] = true
+		}
+		next[i] = o
+	}
+	for i, o := range next {
+		if _, ok := had[o.Display]; ok {
+			continue
+		}
+		name := o.base
+		for n := 2; used[name]; n++ {
+			name = fmt.Sprintf("%s (%d)", o.base, n)
+		}
+		used[name] = true
+		next[i].Name = name
+	}
+	return next
 }

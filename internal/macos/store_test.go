@@ -10,18 +10,18 @@ import (
 
 func TestHiddenStoreRoundTrip(t *testing.T) {
 	s := hiddenStore{path: filepath.Join(t.TempDir(), "sub", "hidden.json")}
-	if m, err := s.load(); err != nil || len(m) != 0 {
+	if m, err := s.load(1700000000); err != nil || len(m) != 0 {
 		t.Fatalf("missing file: %v %v", m, err)
 	}
 	want := map[wm.WindowID]wm.Rect{44: {X: 0, Y: 37, W: 756, H: 945}, 60: {X: 756, Y: 37, W: 756, H: 945}}
-	if err := s.save(want); err != nil {
+	if err := s.save(want, 1700000000); err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.load()
+	got, err := s.load(1700000000)
 	if err != nil || len(got) != 2 || got[44] != want[44] || got[60] != want[60] {
 		t.Fatalf("load = %v, %v", got, err)
 	}
-	if err := s.save(nil); err != nil {
+	if err := s.save(nil, 1700000000); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(s.path); !os.IsNotExist(err) {
@@ -34,7 +34,7 @@ func TestHiddenStoreCorruptFile(t *testing.T) {
 	if err := os.WriteFile(s.path, []byte("{nope"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.load(); err == nil {
+	if _, err := s.load(1700000000); err == nil {
 		t.Errorf("corrupt store loaded without error")
 	}
 }
@@ -46,5 +46,18 @@ func TestStateDir(t *testing.T) {
 	}
 	if got := stateDir(env(nil), "/Users/me"); got != "/Users/me/.local/state/wimy" {
 		t.Errorf("default: %q", got)
+	}
+}
+
+func TestHiddenStoreOtherBootIgnored(t *testing.T) {
+	// window IDs start over after a reboot: entries from another boot
+	// would match unrelated windows
+	s := hiddenStore{path: filepath.Join(t.TempDir(), "hidden.json")}
+	if err := s.save(map[wm.WindowID]wm.Rect{44: {W: 10, H: 10}}, 1700000000); err != nil {
+		t.Fatal(err)
+	}
+	m, err := s.load(1700099999)
+	if err != nil || len(m) != 0 {
+		t.Errorf("entries from another boot loaded: %v %v", m, err)
 	}
 }

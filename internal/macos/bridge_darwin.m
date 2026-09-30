@@ -4,6 +4,7 @@
 // hotkey events are delivered there too.
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
+#import <ServiceManagement/ServiceManagement.h>
 #include <ApplicationServices/ApplicationServices.h>
 #include <Carbon/Carbon.h>
 #include <pthread.h>
@@ -702,4 +703,89 @@ void wimy_deco_destroy(uint32_t wid) {
 	[p orderOut:nil];
 	[p close];
 	[decos removeObjectForKey:@(wid)];
+}
+
+// --- menu bar item ---
+
+@interface WimyMenuTarget : NSObject
+- (void)pick:(NSMenuItem *)item;
+@end
+
+@implementation WimyMenuTarget
+- (void)pick:(NSMenuItem *)item {
+	goMenuItem((int)item.tag);
+}
+@end
+
+static NSStatusItem *status_item;
+static WimyMenuTarget *menu_target;
+
+void wimy_status_set(const char *title, int n, const char **labels, const int *flags) {
+	@autoreleasepool {
+		if (!status_item) {
+			status_item = [[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength];
+			menu_target = [WimyMenuTarget new];
+		}
+		status_item.button.title = [NSString stringWithUTF8String:title];
+		NSMenu *menu = [NSMenu new];
+		menu.autoenablesItems = NO;
+		for (int i = 0; i < n; i++) {
+			if (flags[i] & 4) {
+				[menu addItem:[NSMenuItem separatorItem]];
+				continue;
+			}
+			NSMenuItem *it = [[NSMenuItem alloc] initWithTitle:[NSString stringWithUTF8String:labels[i]]
+			                                            action:@selector(pick:)
+			                                     keyEquivalent:@""];
+			it.target = menu_target;
+			it.tag = i;
+			it.enabled = (flags[i] & 1) != 0;
+			it.state = (flags[i] & 2) ? NSControlStateValueOn : NSControlStateValueOff;
+			[menu addItem:it];
+		}
+		status_item.menu = menu;
+	}
+}
+
+void wimy_status_remove(void) {
+	if (status_item) {
+		[[NSStatusBar systemStatusBar] removeStatusItem:status_item];
+		status_item = nil;
+	}
+}
+
+int wimy_login_set(int on) {
+	@autoreleasepool {
+		if (![[NSBundle mainBundle].bundleIdentifier isEqualToString:@"io.github.jaym.wimy"]) return -1;
+		SMAppService *svc = [SMAppService agentServiceWithPlistName:@"io.github.jaym.wimy.plist"];
+		NSError *err = nil;
+		if (on && svc.status != SMAppServiceStatusEnabled && svc.status != SMAppServiceStatusRequiresApproval) {
+			if (![svc registerAndReturnError:&err]) NSLog(@"wimy: start at login: %@", err);
+		} else if (!on && svc.status != SMAppServiceStatusNotRegistered) {
+			if (![svc unregisterAndReturnError:&err]) NSLog(@"wimy: start at login: %@", err);
+		}
+		switch (svc.status) {
+		case SMAppServiceStatusEnabled: return 1;
+		case SMAppServiceStatusRequiresApproval: return 2;
+		default: return 0;
+		}
+	}
+}
+
+void wimy_open_accessibility_settings(void) {
+	@autoreleasepool {
+		[[NSWorkspace sharedWorkspace]
+		    openURL:[NSURL URLWithString:@"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"]];
+	}
+}
+
+void wimy_start_trust_poll(void) {
+	dispatch_source_t t = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
+	dispatch_source_set_timer(t, dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), NSEC_PER_SEC, NSEC_PER_SEC / 4);
+	dispatch_source_set_event_handler(t, ^{
+		goTrustTick();
+	});
+	dispatch_resume(t);
+	static dispatch_source_t keep;
+	keep = t;
 }

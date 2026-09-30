@@ -54,6 +54,18 @@ void wimy_deco_update(uint32_t wid, wimy_rect frame, double barH, uint32_t fill_
 void wimy_deco_image(uint32_t wid, const void *bgra, int pw, int ph); // premultiplied BGRA pixels
 void wimy_deco_hide(uint32_t wid);
 void wimy_deco_destroy(uint32_t wid);
+
+// Menu bar item. flags per item: 1 enabled, 2 checked, 4 separator.
+// A click calls goMenuItem(index).
+void wimy_status_set(const char *title, int n, const char **labels, const int *flags);
+void wimy_status_remove(void);
+
+// Start at login via SMAppService (Contents/Library/LaunchAgents/
+// io.github.jaym.wimy.plist). Returns -1 when not running from
+// Wimy.app, else 0 off, 1 on, 2 needs approval.
+int wimy_login_set(int on);
+void wimy_open_accessibility_settings(void);
+void wimy_start_trust_poll(void); // goTrustTick every second
 // Returns 0 on success; the AXError of the position and final size
 // calls go to *perr and *serr (apps sometimes report an error for a
 // frame they did apply, so callers check by reading the frame back).

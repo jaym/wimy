@@ -204,3 +204,14 @@ func TestRestartReachesPlatform(t *testing.T) {
 		t.Errorf("restart did not reach the platform")
 	}
 }
+
+func TestConfigPath(t *testing.T) {
+	c := NewCore(config.Default(), "/etc/wimy.kdl", &fakePlatform{})
+	if got := c.ConfigPath(); got != "/etc/wimy.kdl" {
+		t.Errorf("ConfigPath = %q, want the -config argument", got)
+	}
+	d := NewCore(config.Default(), "", &fakePlatform{})
+	if got := d.ConfigPath(); got != config.DefaultPath() {
+		t.Errorf("ConfigPath = %q, want the default path %q", got, config.DefaultPath())
+	}
+}

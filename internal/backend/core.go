@@ -94,3 +94,12 @@ func (c *Core) DrainQueue() {
 func (c *Core) StartAutostart() {
 	c.autostart.StartAll(c.Cfg.Autostart)
 }
+
+// ConfigPath returns the config file in use: the -config argument, or
+// the default path.
+func (c *Core) ConfigPath() string {
+	if c.configArg != "" {
+		return c.configArg
+	}
+	return config.DefaultPath()
+}

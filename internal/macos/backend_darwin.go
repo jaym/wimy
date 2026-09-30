@@ -2,14 +2,14 @@ package macos
 
 /*
 #cgo CFLAGS: -x objective-c -fobjc-arc -Wno-deprecated-declarations
-#cgo LDFLAGS: -framework AppKit -framework ApplicationServices -framework Carbon -framework QuartzCore
+#cgo LDFLAGS: -framework AppKit -framework ApplicationServices -framework Carbon -framework QuartzCore -framework ServiceManagement
+#include <stdlib.h>
 #include "bridge.h"
 */
 import "C"
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"math"
 	"os"
@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/cgo"
+	"slices"
 	"time"
 	"unsafe"
 
@@ -75,6 +76,13 @@ type Backend struct {
 	// strip when titlebars are off) and each window's current image
 	renderers map[int32]*titlebar.Renderer
 	decoKeys  decoCache
+
+	// menu bar item and startup state
+	started   bool       // start() ran (Accessibility granted)
+	login     int        // start-at-login status (loginOff, ...)
+	menuTitle string     // what the status item shows, to skip no-op updates
+	menu      []menuItem // current menu; goMenuItem indexes it
+	menuShown bool
 
 	// away remembers the views (tags) of minimized windows, so a
 	// restored window returns to them instead of the focused view.
@@ -158,12 +166,37 @@ func (b *Backend) checkSecureInput() {
 // keys, and runs the AppKit event loop until Quit or Shutdown. It must
 // be called from the main goroutine.
 func (b *Backend) Run(ctx context.Context) error {
-	if C.wimy_ax_trusted(1) == 0 {
-		exe, _ := os.Executable()
-		return fmt.Errorf("wimy needs the Accessibility permission: allow %s (or the terminal that starts it) "+
-			"in System Settings → Privacy & Security → Accessibility, then start wimy again", exe)
-	}
 	C.wimy_app_init()
+	if C.wimy_ax_trusted(1) != 0 {
+		b.start()
+	} else {
+		// Wait instead of exiting: under launchd an exit would only
+		// restart wimy in a loop. The menu bar item says what's missing.
+		exe, _ := os.Executable()
+		log.Printf("waiting for the Accessibility permission: allow %s (or the terminal that starts it) "+
+			"in System Settings → Privacy & Security → Accessibility", exe)
+		b.updateMenu()
+		C.wimy_start_trust_poll()
+	}
+	C.wimy_app_run()
+	// Quit, Shutdown (SIGINT/SIGTERM): never leave windows parked
+	b.unhideAll()
+	return nil
+}
+
+//export goTrustTick
+func goTrustTick() {
+	b := current
+	defer b.guard()
+	if !b.started && C.wimy_ax_trusted(0) != 0 {
+		log.Printf("Accessibility permission granted")
+		b.start()
+	}
+}
+
+// start brings wimy up once it may use the Accessibility API.
+func (b *Backend) start() {
+	b.started = true
 	b.store = hiddenStore{path: filepath.Join(stateDir(os.Getenv, homeDir()), "hidden.json")}
 	if tv, err := unix.SysctlTimeval("kern.boottime"); err == nil {
 		b.boot = tv.Sec
@@ -219,11 +252,76 @@ func (b *Backend) Run(ctx context.Context) error {
 	if !restarted {
 		b.StartAutostart() // after a restart the old children were adopted
 	}
+	b.applyLogin()
 	b.markDirty()
-	C.wimy_app_run()
-	// Quit, Shutdown (SIGINT/SIGTERM): never leave windows parked
-	b.unhideAll()
-	return nil
+}
+
+// applyLogin registers or unregisters the login item per start-at-login
+// (only when running from Wimy.app).
+func (b *Backend) applyLogin() {
+	b.login = int(C.wimy_login_set(cbool(b.Cfg.StartAtLogin)))
+	if b.login == loginApproval {
+		log.Printf("start at login: approve Wimy in System Settings → General → Login Items")
+	}
+}
+
+// updateMenu shows the menu bar item (or removes it, per status-item)
+// when what it shows changed.
+func (b *Backend) updateMenu() {
+	if b.started && !b.Cfg.StatusItem {
+		if b.menuShown {
+			C.wimy_status_remove()
+			b.menuShown, b.menuTitle, b.menu = false, "", nil
+		}
+		return
+	}
+	cfgPath := b.ConfigPath()
+	title, items := menuFor(b.State, menuStatus{Trusted: b.started, Login: b.login, ConfigPath: cfgPath})
+	if b.menuShown && title == b.menuTitle && slices.Equal(items, b.menu) {
+		return
+	}
+	b.menuShown, b.menuTitle, b.menu = true, title, items
+	labels := make([]*C.char, len(items))
+	flags := make([]C.int, len(items))
+	for i, it := range items {
+		labels[i] = C.CString(it.Label)
+		var f C.int
+		if it.Enabled {
+			f |= 1
+		}
+		if it.Checked {
+			f |= 2
+		}
+		if it.Sep {
+			f |= 4
+		}
+		flags[i] = f
+	}
+	ctitle := C.CString(title)
+	C.wimy_status_set(ctitle, C.int(len(items)), &labels[0], &flags[0])
+	C.free(unsafe.Pointer(ctitle))
+	for _, l := range labels {
+		C.free(unsafe.Pointer(l))
+	}
+}
+
+// goMenuItem: a click in the menu bar item's menu.
+//
+//export goMenuItem
+func goMenuItem(i C.int) {
+	b := current
+	defer b.guard()
+	if int(i) >= len(b.menu) {
+		return
+	}
+	switch cmd := b.menu[i].Cmd; cmd {
+	case "":
+	case cmdOpenAccessibility:
+		C.wimy_open_accessibility_settings()
+	default:
+		b.Enqueue(cmd)
+		b.markDirty()
+	}
 }
 
 func homeDir() string {
@@ -297,6 +395,9 @@ func (b *Backend) ApplyConfigChange(ch backend.ConfigChange) {
 	}
 	if ch.BarGap {
 		b.syncScreens()
+	}
+	if ch.Status {
+		b.applyLogin()
 	}
 	if ch.Border || ch.Titlebar {
 		// colors, border width or height changed: re-render everything
@@ -380,6 +481,7 @@ func (b *Backend) apply() {
 		}
 	}
 	b.lastFocus = b.State.Focused
+	b.updateMenu()
 	if b.notify != nil {
 		b.notify()
 	}

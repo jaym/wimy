@@ -10,7 +10,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"image/color"
 	"os"
 	"sync"
 
@@ -90,13 +89,8 @@ func New(cfg *config.Config, configArg string, notify func()) *Backend {
 		notify:         notify,
 	}
 	b.Core = backend.NewCore(cfg, configArg, b)
-	b.tbr = newTitlebarRenderer(cfg)
+	b.tbr = backend.NewTitlebarRenderer(cfg, cfg.Titlebar.Height)
 	return b
-}
-
-// toRGBA converts a 32-bit-per-channel protocol color to 8-bit.
-func toRGBA(c config.Color) color.RGBA {
-	return color.RGBA{R: uint8(c.R >> 24), G: uint8(c.G >> 24), B: uint8(c.B >> 24), A: uint8(c.A >> 24)}
 }
 
 // Snapshot runs fn with exclusive access to the model: no protocol

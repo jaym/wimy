@@ -1,6 +1,7 @@
 package config
 
 import (
+	"image/color"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -233,5 +234,12 @@ func TestBarGap(t *testing.T) {
 	}
 	if _, err := Load(path); err == nil {
 		t.Errorf("negative bar-gap accepted")
+	}
+}
+
+func TestColorRGBA(t *testing.T) {
+	c, _ := ParseColor("#8aadf480")
+	if got := c.RGBA(); got != (color.RGBA{0x8a, 0xad, 0xf4, 0x80}) {
+		t.Errorf("RGBA() = %v", got)
 	}
 }

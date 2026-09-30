@@ -18,6 +18,7 @@ package config
 
 import (
 	"fmt"
+	"image/color"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,6 +30,11 @@ import (
 // Color is an RGBA color with 32-bit channels as the river protocol
 // expects them (0 .. 0xffffffff, pre-multiplied alpha).
 type Color struct{ R, G, B, A uint32 }
+
+// RGBA converts the color to 8 bits per channel.
+func (c Color) RGBA() color.RGBA {
+	return color.RGBA{R: uint8(c.R >> 24), G: uint8(c.G >> 24), B: uint8(c.B >> 24), A: uint8(c.A >> 24)}
+}
 
 // ParseColor parses "#rrggbb" or "#rrggbbaa".
 func ParseColor(s string) (Color, error) {

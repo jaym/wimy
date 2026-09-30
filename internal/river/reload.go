@@ -4,22 +4,7 @@ package river
 
 import (
 	"wimy/internal/backend"
-	"wimy/internal/config"
-	"wimy/internal/titlebar"
 )
-
-// newTitlebarRenderer builds the titlebar renderer from the config
-// (it embeds the border colors and width for the frame).
-func newTitlebarRenderer(cfg *config.Config) *titlebar.Renderer {
-	return titlebar.New(cfg.Titlebar.Height, titlebar.Colors{
-		FocusedBg:     toRGBA(cfg.Titlebar.FocusedBg),
-		FocusedFg:     toRGBA(cfg.Titlebar.FocusedFg),
-		NormalBg:      toRGBA(cfg.Titlebar.NormalBg),
-		NormalFg:      toRGBA(cfg.Titlebar.NormalFg),
-		BorderFocused: toRGBA(cfg.Border.Focused),
-		BorderNormal:  toRGBA(cfg.Border.Normal),
-	}, cfg.Border.Width)
-}
 
 // ApplyConfigChange implements backend.Platform: it applies the parts
 // of a config reload that live in protocol objects. b.Cfg already
@@ -57,7 +42,7 @@ func (b *Backend) ApplyConfigChange(ch backend.ConfigChange) {
 	}
 	// the titlebar renderer embeds the border colors and width
 	if ch.Border || ch.Titlebar {
-		b.tbr = newTitlebarRenderer(b.Cfg)
+		b.tbr = backend.NewTitlebarRenderer(b.Cfg, b.Cfg.Titlebar.Height)
 	}
 	if ch.Titlebar {
 		for _, w := range b.windows {

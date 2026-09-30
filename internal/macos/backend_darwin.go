@@ -339,7 +339,7 @@ func (b *Backend) apply() {
 
 	// decorations go behind their windows, so after the windows moved
 	for _, p := range placements {
-		b.decorate(p)
+		b.decorate(p, placements)
 	}
 
 	b.checkSecureInput()
@@ -347,6 +347,9 @@ func (b *Backend) apply() {
 	case f != 0 && f != b.lastFocus:
 		b.echo.sent(f, b.pids[f], time.Now())
 		C.wimy_window_focus(C.uint32_t(f))
+		// the app raises its window asynchronously; order the panels
+		// again once it has, or they stay under the windows it overlaps
+		C.wimy_schedule_apply_after(decoReorderDelay)
 	case f == 0 && b.lastFocus != 0:
 		// an empty view: the window that had focus is parked (or gone)
 		// and must not keep taking keystrokes
@@ -360,9 +363,20 @@ func (b *Backend) apply() {
 	}
 }
 
+// decoReorderDelay is how long after focusing a window its panels are
+// ordered again (ms).
+const decoReorderDelay = 120
+
+// cornerRadius is the window corner radius the border fill covers
+// (Tahoe windows round their corners by up to about this much); inside
+// it the fill leaves the window alone, so translucent windows aren't
+// tinted.
+const cornerRadius = 26
+
 // decorate shows (or hides) a window's frame panel: titlebar and border
-// behind it, or the titlebar strip of a collapsed stack window.
-func (b *Backend) decorate(p wm.Placement) {
+// behind it, or the titlebar strip of a collapsed stack window, ordered
+// just above its column's expanded window.
+func (b *Backend) decorate(p wm.Placement, all []wm.Placement) {
 	id := C.uint32_t(p.ID)
 	d, ok := decoFor(p, b.Cfg.Titlebar.Height, b.Cfg.Border.Width)
 	if !ok || len(b.outputs) == 0 {
@@ -374,8 +388,15 @@ func (b *Backend) decorate(p wm.Placement) {
 		col = b.Cfg.Border.Focused
 	}
 	f := fromModel(d.Panel, float64(b.outputs[0].Full.H))
+	var above wm.WindowID
+	if d.Front {
+		above = stripAnchor(all, p)
+	}
+	c := d.Content
 	C.wimy_deco_update(id, C.wimy_rect{x: C.double(f.X), y: C.double(f.Y), w: C.double(f.W), h: C.double(f.H)},
-		C.double(d.BarH), C.uint32_t(argb(col)), cbool(d.Fill), cbool(d.Front))
+		C.double(d.BarH), C.uint32_t(argb(col)), cbool(d.Fill),
+		C.wimy_rect{x: C.double(c.X), y: C.double(c.Y), w: C.double(c.W), h: C.double(c.H)},
+		cornerRadius, cbool(d.Front), C.uint32_t(above))
 	if d.BarH <= 0 {
 		return
 	}
@@ -668,8 +689,9 @@ func (b *Backend) windowAdded(id wm.WindowID, bundle, title, subrole string, has
 	b.State.SetAppID(id, bundle)
 	b.State.SetTitle(id, title)
 	if floating && ok {
-		// keep floating windows where the app put them
-		b.State.SetFloatRect(id, cur)
+		// keep floating windows where the app put them: wimy's titlebar
+		// goes above
+		b.State.SetFloatRect(id, floatOuter(cur, b.State.TitlebarHeight))
 	}
 	b.markDirty()
 }
@@ -745,6 +767,31 @@ func goDecoClicked(wid C.uint32_t) {
 	defer b.guard()
 	if b.known[id] {
 		b.State.FocusWindow(id)
+		b.markDirty()
+	}
+}
+
+// goWindowMoved: a window moved or resized itself, or the user dragged
+// it. A floating window keeps its new place (its panel follows).
+// Tiled windows keep their layout place (mouse handling is Phase 4).
+//
+//export goWindowMoved
+func goWindowMoved(wid C.uint32_t) {
+	b, id := current, wm.WindowID(wid)
+	defer b.guard()
+	if !b.known[id] || b.parked[id] {
+		return
+	}
+	v := b.State.ActiveViewOf(id)
+	if v == nil || !v.FloatContains(id) {
+		return
+	}
+	cur, ok := b.frame(id)
+	if !ok {
+		return
+	}
+	if outer := floatOuter(cur, b.State.TitlebarHeight); outer != b.State.FloatRectOf(id) {
+		b.State.SetFloatRect(id, outer)
 		b.markDirty()
 	}
 }

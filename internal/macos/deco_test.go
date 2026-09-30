@@ -13,7 +13,7 @@ func TestDecoNormal(t *testing.T) {
 	if !ok {
 		t.Fatal("no decoration")
 	}
-	want := decoLayout{Panel: wm.Rect{X: 98, Y: 115, W: 804, H: 624}, BarH: 22, Fill: true}
+	want := decoLayout{Panel: wm.Rect{X: 98, Y: 115, W: 804, H: 624}, Content: wm.Rect{X: 2, Y: 22, W: 800, H: 600}, BarH: 22, Fill: true}
 	if d != want {
 		t.Errorf("deco = %+v, want %+v (titlebar as wide as content + both borders)", d, want)
 	}
@@ -22,7 +22,7 @@ func TestDecoNormal(t *testing.T) {
 func TestDecoNoBar(t *testing.T) {
 	p := wm.Placement{ID: 1, Rect: wm.Rect{X: 100, Y: 100, W: 800, H: 600}}
 	d, _ := decoFor(p, 0, 2)
-	want := decoLayout{Panel: wm.Rect{X: 98, Y: 98, W: 804, H: 604}, Fill: true}
+	want := decoLayout{Panel: wm.Rect{X: 98, Y: 98, W: 804, H: 604}, Content: wm.Rect{X: 2, Y: 2, W: 800, H: 600}, Fill: true}
 	if d != want {
 		t.Errorf("border-only deco = %+v, want %+v", d, want)
 	}
@@ -82,5 +82,38 @@ func TestDecoCacheScale(t *testing.T) {
 	k.Focused = true
 	if !c.stale(1, k) {
 		t.Errorf("focus change did not re-render")
+	}
+}
+
+func TestFloatOuter(t *testing.T) {
+	// a dialog the app put at (300,200) 400x300: its titlebar goes above
+	// it, so the window itself doesn't move or shrink
+	if got, want := floatOuter(wm.Rect{X: 300, Y: 200, W: 400, H: 300}, 22), (wm.Rect{X: 300, Y: 178, W: 400, H: 322}); got != want {
+		t.Errorf("floatOuter = %+v, want %+v", got, want)
+	}
+	if got := floatOuter(wm.Rect{X: 1, Y: 2, W: 3, H: 4}, 0); got != (wm.Rect{X: 1, Y: 2, W: 3, H: 4}) {
+		t.Errorf("no titlebar: %+v", got)
+	}
+}
+
+func TestStripAnchor(t *testing.T) {
+	ps := []wm.Placement{
+		{ID: 1, Rect: wm.Rect{X: 0, Y: 59, W: 756, H: 700}, Collapsed: true, Layer: wm.LayerTiled, Output: "a"},
+		{ID: 2, Rect: wm.Rect{X: 0, Y: 81, W: 756, H: 700}, Layer: wm.LayerTiled, Output: "a"},    // expanded
+		{ID: 3, Rect: wm.Rect{X: 756, Y: 37, W: 756, H: 900}, Layer: wm.LayerTiled, Output: "a"},  // other column
+		{ID: 4, Rect: wm.Rect{X: 0, Y: 81, W: 756, H: 700}, Layer: wm.LayerFloating, Output: "a"}, // floating on top
+		{ID: 5, Rect: wm.Rect{X: 0, Y: 81, W: 756, H: 700}, Hidden: true, Layer: wm.LayerTiled},   // other view
+	}
+	if got := stripAnchor(ps, ps[0]); got != 2 {
+		t.Errorf("strip anchored to %d, want 2 (its column's expanded window)", got)
+	}
+}
+
+func TestDecoContentInset(t *testing.T) {
+	p := wm.Placement{ID: 1, Rect: wm.Rect{X: 100, Y: 137, W: 800, H: 600}, Bar: true}
+	d, _ := decoFor(p, 22, 2)
+	// the window's own area inside the panel (panel coordinates, top-left)
+	if want := (wm.Rect{X: 2, Y: 22, W: 800, H: 600}); d.Content != want {
+		t.Errorf("content = %+v, want %+v", d.Content, want)
 	}
 }

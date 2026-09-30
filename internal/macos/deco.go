@@ -9,10 +9,11 @@ import "wimy/internal/wm"
 
 // decoLayout is where a window's decoration panel goes.
 type decoLayout struct {
-	Panel wm.Rect // model coordinates
-	BarH  int32   // titlebar strip at the top of the panel, 0 for none
-	Fill  bool    // fill with the border color (behind the window)
-	Front bool    // order in front (a stack strip: the window is parked)
+	Panel   wm.Rect // model coordinates
+	Content wm.Rect // the window's area inside the panel (top-left origin); zero for a strip
+	BarH    int32   // titlebar strip at the top of the panel, 0 for none
+	Fill    bool    // fill with the border color (behind the window)
+	Front   bool    // order in front (a stack strip: the window is parked)
 }
 
 // decoFor returns the decoration of a placement; false for none
@@ -49,9 +50,10 @@ func decoFor(p wm.Placement, bar, border int32) (decoLayout, bool) {
 		top = b // the titlebar image draws the top border itself
 	}
 	return decoLayout{
-		Panel: wm.Rect{X: r.X - border, Y: r.Y - top, W: r.W + 2*border, H: r.H + top + border},
-		BarH:  b,
-		Fill:  true,
+		Panel:   wm.Rect{X: r.X - border, Y: r.Y - top, W: r.W + 2*border, H: r.H + top + border},
+		Content: wm.Rect{X: border, Y: top, W: r.W, H: r.H},
+		BarH:    b,
+		Fill:    true,
 	}, true
 }
 
@@ -80,4 +82,25 @@ func (c decoCache) stale(id wm.WindowID, k decoKey) bool {
 	}
 	c[id] = k
 	return true
+}
+
+// floatOuter returns the floating rect (content plus the titlebar
+// above it) for a window whose content is at r: wimy's titlebar goes
+// above the window, so adopting a window doesn't move or shrink it.
+func floatOuter(r wm.Rect, bar int32) wm.Rect {
+	return wm.Rect{X: r.X, Y: r.Y - bar, W: r.W, H: r.H + bar}
+}
+
+// stripAnchor returns the window a collapsed stack strip is ordered
+// just above: its column's expanded window (same output, x and width
+// in the tiled layer). Ordering strips there rather than in front of
+// everything keeps floating windows above them. 0 if there is none.
+func stripAnchor(ps []wm.Placement, strip wm.Placement) wm.WindowID {
+	for _, p := range ps {
+		if p.ID != strip.ID && !p.Hidden && !p.Collapsed && p.Layer == wm.LayerTiled &&
+			p.Output == strip.Output && p.Rect.X == strip.Rect.X && p.Rect.W == strip.Rect.W {
+			return p.ID
+		}
+	}
+	return 0
 }

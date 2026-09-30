@@ -8,6 +8,7 @@
 #include <Carbon/Carbon.h>
 #include <pthread.h>
 #include <stdlib.h>
+#include <math.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -22,6 +23,7 @@ typedef struct {
 	uint32_t wid;
 	pid_t pid;
 	AXUIElementRef el;
+	int fullscreen; // in native fullscreen (its own Space): out of the tiling
 } tracked_win;
 
 typedef struct {
@@ -110,7 +112,9 @@ static CFStringRef window_notes(int k) {
 	case 0: return kAXUIElementDestroyedNotification;
 	case 1: return kAXTitleChangedNotification;
 	case 2: return kAXWindowMiniaturizedNotification;
-	default: return kAXWindowDeminiaturizedNotification;
+	case 3: return kAXWindowDeminiaturizedNotification;
+	case 4: return kAXMovedNotification;
+	default: return kAXResizedNotification;
 	}
 }
 
@@ -122,7 +126,7 @@ static void register_window_notes(uint32_t wid, int retry) {
 	int i = find_win(wid), a = i >= 0 ? find_app(wins[i].pid) : -1;
 	if (a < 0) return;
 	int failed = 0;
-	for (int k = 0; k < 4; k++) {
+	for (int k = 0; k < 6; k++) {
 		AXError err = AXObserverAddNotification(apps[a].obs, wins[i].el, window_notes(k), NULL);
 		if (err != kAXErrorSuccess && err != kAXErrorNotificationAlreadyRegistered) failed = 1;
 	}
@@ -148,7 +152,7 @@ static void track_window(pid_t pid, AXUIElementRef win) {
 		capwins = capwins ? capwins * 2 : 32;
 		wins = realloc(wins, capwins * sizeof *wins);
 	}
-	wins[nwins++] = (tracked_win){wid, pid, (AXUIElementRef)CFRetain(win)};
+	wins[nwins++] = (tracked_win){wid, pid, (AXUIElementRef)CFRetain(win), 0};
 	register_window_notes(wid, 1);
 	report_window(find_win(wid), 0);
 }
@@ -174,6 +178,21 @@ static void observer_cb(AXObserverRef obs, AXUIElementRef el, CFStringRef note, 
 	} else if (CFEqual(note, kAXWindowDeminiaturizedNotification)) {
 		int i = find_el(el);
 		if (i >= 0) report_window(i, 0);
+	} else if (CFEqual(note, kAXMovedNotification) || CFEqual(note, kAXResizedNotification)) {
+		int i = find_el(el);
+		if (i < 0) return;
+		// native fullscreen moves the window to its own Space: leave
+		// the tiling (like minimize) until it comes back
+		int fs = bool_attr(el, CFSTR("AXFullScreen"));
+		if (fs && !wins[i].fullscreen) {
+			wins[i].fullscreen = 1;
+			goWindowGone(wins[i].wid);
+		} else if (!fs && wins[i].fullscreen) {
+			wins[i].fullscreen = 0;
+			report_window(i, 0);
+		} else if (!fs) {
+			goWindowMoved(wins[i].wid);
+		}
 	} else if (CFEqual(note, kAXUIElementDestroyedNotification)) {
 		int i = find_el(el);
 		if (i >= 0) untrack_at(i);
@@ -562,6 +581,7 @@ void wimy_window_close(uint32_t wid) {
 // focus the window it decorates.
 @interface WimyDecoView : NSView
 @property uint32_t wid;
+@property(strong) CAShapeLayer *ring;
 @property(strong) CALayer *bar;
 @end
 
@@ -598,6 +618,9 @@ static NSPanel *deco_panel(uint32_t wid) {
 	WimyDecoView *v = [[WimyDecoView alloc] initWithFrame:NSMakeRect(0, 0, 1, 1)];
 	v.wid = wid;
 	v.wantsLayer = YES;
+	v.ring = [CAShapeLayer layer];
+	v.ring.fillRule = kCAFillRuleEvenOdd;
+	[v.layer addSublayer:v.ring];
 	v.bar = [CALayer layer];
 	v.bar.contentsGravity = kCAGravityResize;
 	[v.layer addSublayer:v.bar];
@@ -611,21 +634,35 @@ static CGColorRef argb_color(uint32_t c) {
 	                         ((c >> 24) & 0xff) / 255.0);
 }
 
-void wimy_deco_update(uint32_t wid, wimy_rect frame, double barH, uint32_t fill_argb, int fill, int front) {
+void wimy_deco_update(uint32_t wid, wimy_rect frame, double barH, uint32_t fill_argb, int fill, wimy_rect content,
+                      double radius, int front, uint32_t above_wid) {
 	@autoreleasepool {
 		NSPanel *p = deco_panel(wid);
 		WimyDecoView *v = (WimyDecoView *)p.contentView;
 		[CATransaction begin];
 		[CATransaction setDisableActions:YES];
 		[p setFrame:NSMakeRect(frame.x, frame.y, frame.w, frame.h) display:NO];
-		CGColorRef c = argb_color(fill_argb);
-		v.layer.backgroundColor = fill ? c : NULL;
-		CGColorRelease(c);
+		v.ring.frame = CGRectMake(0, 0, frame.w, frame.h);
+		v.ring.hidden = !fill;
+		if (fill) {
+			// the panel minus the window's rounded shape: the border
+			// ring plus the corners the rounded window leaves open
+			CGMutablePathRef path = CGPathCreateMutable();
+			CGPathAddRect(path, NULL, CGRectMake(0, 0, frame.w, frame.h));
+			CGRect in = CGRectMake(content.x, content.y, content.w, content.h);
+			double r = fmin(radius, fmin(in.size.width, in.size.height) / 2);
+			CGPathAddRoundedRect(path, NULL, in, r, r);
+			v.ring.path = path;
+			CGPathRelease(path);
+			CGColorRef c = argb_color(fill_argb);
+			v.ring.fillColor = c;
+			CGColorRelease(c);
+		}
 		v.bar.frame = CGRectMake(0, 0, frame.w, barH);
 		v.bar.hidden = barH <= 0;
 		[CATransaction commit];
 		if (front)
-			[p orderWindow:NSWindowAbove relativeTo:0];
+			[p orderWindow:NSWindowAbove relativeTo:(NSInteger)above_wid];
 		else
 			[p orderWindow:NSWindowBelow relativeTo:(NSInteger)wid];
 	}
@@ -654,7 +691,9 @@ void wimy_deco_image(uint32_t wid, const void *bgra, int pw, int ph) {
 }
 
 void wimy_deco_hide(uint32_t wid) {
-	[decos[@(wid)] orderOut:nil];
+	@autoreleasepool {
+		[decos[@(wid)] orderOut:nil];
+	}
 }
 
 void wimy_deco_destroy(uint32_t wid) {

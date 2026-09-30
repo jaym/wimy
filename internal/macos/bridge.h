@@ -45,7 +45,12 @@ int wimy_focus_none(void); // activate Finder (keys go nowhere); returns its pid
 // coordinates; the titlebar image fills the top barH points; fill is
 // the border color (0xAARRGGBB) drawn behind the window. A click calls
 // goDecoClicked(wid).
-void wimy_deco_update(uint32_t wid, wimy_rect frame, double barH, uint32_t fill_argb, int fill, int front);
+// content is the window's area inside the panel (top-left origin): the
+// fill is a ring around it plus its corners outside a rounded rect of
+// the given radius, so translucent windows aren't tinted. A strip
+// (front) is ordered just above window above_wid (0: in front of all).
+void wimy_deco_update(uint32_t wid, wimy_rect frame, double barH, uint32_t fill_argb, int fill, wimy_rect content,
+                      double radius, int front, uint32_t above_wid);
 void wimy_deco_image(uint32_t wid, const void *bgra, int pw, int ph); // premultiplied BGRA pixels
 void wimy_deco_hide(uint32_t wid);
 void wimy_deco_destroy(uint32_t wid);

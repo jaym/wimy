@@ -38,7 +38,10 @@ jobs:
         id: pkg
         run: |
           zip="Wimy-${GITHUB_REF_NAME#v}-arm64.zip"
-          ditto -c -k --keepParent bin/Wimy.app "$zip"
+          # no extended attributes: ditto would store them as AppleDouble
+          # ._* entries, which unzip (Nix) extracts as files inside the
+          # bundle, breaking its sealed-resources signature
+          ditto -c -k --norsrc --noextattr --noqtn --keepParent bin/Wimy.app "$zip"
           shasum -a 256 "$zip" > "$zip.sha256"
           echo "zip=$zip" >> "$GITHUB_OUTPUT"
       - name: Publish the release

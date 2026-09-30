@@ -85,3 +85,14 @@ func TestMenuForUntrusted(t *testing.T) {
 		}
 	}
 }
+
+func TestRunsBeforeStart(t *testing.T) {
+	// while wimy waits for the Accessibility permission only quit and
+	// restart make sense (restart re-asks for the permission); the rest
+	// waits for startup
+	for cmd, want := range map[string]bool{"quit": true, "restart": true, "view 2": false, "reload": false, "focus left": false} {
+		if got := runsBeforeStart(cmd); got != want {
+			t.Errorf("runsBeforeStart(%q) = %v, want %v", cmd, got, want)
+		}
+	}
+}

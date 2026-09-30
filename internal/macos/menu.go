@@ -109,3 +109,8 @@ func viewLess(a, b string) bool {
 	}
 	return a < b
 }
+
+// runsBeforeStart reports whether a command runs while wimy waits for
+// the Accessibility permission: quit, and restart (a new start asks
+// for the permission again). Everything else waits until wimy is up.
+func runsBeforeStart(cmd string) bool { return cmd == "quit" || cmd == "restart" }

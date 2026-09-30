@@ -450,8 +450,8 @@ func (b *Backend) apply() {
 	b.scheduled = false
 	if !b.started {
 		// waiting for the Accessibility permission: nothing can be
-		// moved yet; only quit runs, the rest waits for start()
-		b.DrainQueueIf(func(cmd string) bool { return cmd == "quit" })
+		// moved yet; only quit and restart run, the rest waits for start()
+		b.DrainQueueIf(runsBeforeStart)
 		b.updateMenu()
 		return
 	}

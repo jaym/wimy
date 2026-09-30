@@ -243,3 +243,27 @@ func TestColorRGBA(t *testing.T) {
 		t.Errorf("RGBA() = %v", got)
 	}
 }
+
+func TestMacOSSettings(t *testing.T) {
+	d := Default()
+	onMac := runtime.GOOS == "darwin"
+	if d.StatusItem != onMac || d.StartAtLogin != onMac {
+		t.Errorf("defaults status-item=%v start-at-login=%v, want %v (on by default on macOS only)",
+			d.StatusItem, d.StartAtLogin, onMac)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.kdl")
+	if err := os.WriteFile(path, []byte("status-item false\nstart-at-login false\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(path)
+	if err != nil || c.StatusItem || c.StartAtLogin {
+		t.Fatalf("parsed status-item=%v start-at-login=%v err=%v", c.StatusItem, c.StartAtLogin, err)
+	}
+	if err := os.WriteFile(path, []byte("status-item 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Errorf("non-boolean status-item accepted")
+	}
+}

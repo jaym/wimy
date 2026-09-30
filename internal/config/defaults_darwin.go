@@ -14,6 +14,7 @@ var platformDefaults = osDefaults{
 	terminal: pickMacTerminal(appExists, homeDir()),
 	launcher: "open -a Spotlight",
 	menu:     "choose",
+	macOS:    true,
 }
 
 func appExists(path string) bool {

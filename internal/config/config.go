@@ -102,6 +102,7 @@ type osDefaults struct {
 	terminal string
 	launcher string
 	menu     string
+	macOS    bool // status-item and start-at-login default to on
 }
 
 // Config is the resolved wimy configuration.
@@ -120,10 +121,14 @@ type Config struct {
 	// BarGap is the space in points reserved at the top of every screen
 	// for a bar the window manager doesn't know about (SketchyBar).
 	// macOS only: on Linux bars reserve space through the layer shell.
-	BarGap    int32
-	Binds     []Bind
-	Actions   map[string]string // name -> shell command
-	Autostart []string
+	BarGap int32
+	// StatusItem shows wimy's menu bar item (macOS only).
+	StatusItem bool
+	// StartAtLogin registers Wimy.app as a login item (macOS only).
+	StartAtLogin bool
+	Binds        []Bind
+	Actions      map[string]string // name -> shell command
+	Autostart    []string
 }
 
 // Default returns the built-in configuration: wmii's key binding set
@@ -137,6 +142,8 @@ func Default() *Config {
 		FocusFollowsMouse: true,
 		Launcher:          platformDefaults.launcher,
 		Menu:              platformDefaults.menu,
+		StatusItem:        platformDefaults.macOS,
+		StartAtLogin:      platformDefaults.macOS,
 		StackStrip:        28,
 		Actions: map[string]string{
 			"quit": "wimyctl quit",
@@ -333,6 +340,20 @@ func (c *Config) applyNode(n *document.Node) error {
 			return err
 		}
 		c.Menu = m
+
+	case "status-item", "start-at-login":
+		if len(n.Arguments) < 1 {
+			return fmt.Errorf("%s: missing true/false", name)
+		}
+		v, ok := n.Arguments[0].Value.(bool)
+		if !ok {
+			return fmt.Errorf("%s: want true or false", name)
+		}
+		if name == "status-item" {
+			c.StatusItem = v
+		} else {
+			c.StartAtLogin = v
+		}
 
 	case "focus-follows-mouse":
 		if len(n.Arguments) < 1 {

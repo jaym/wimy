@@ -183,7 +183,7 @@ Launch paths:
    `KeepAlive = { SuccessfulExit = false }`, registered via
    `SMAppService.agent(plistName:)`. Crash → launchd restarts wimy (and
    startup recovers hidden windows). `wimyctl quit` exits 0 → stays
-   stopped. Config key `start-at-login` (default `#true` on darwin,
+   stopped. Config key `start-at-login` (default `true` on darwin,
    ignored on Linux) registers or unregisters it at startup and on
    `reload`. The user approves it once in System Settings → Login Items.
 2. **Manually:** `open -a Wimy`, or from the menu bar item's Quit/relaunch.
@@ -219,7 +219,7 @@ switch:
   pane), Start at login toggle, Quit wimy.
 - Every menu action goes through the command registry (invariant 4), so
   it behaves exactly like the matching key binding or `wimyctl run`.
-- Config: `status-item #true` (default on darwin; ignored on Linux,
+- Config: `status-item true` (default on darwin; ignored on Linux,
   where waybar fills this role). Users running SketchyBar can turn it off.
 
 ## Approach
@@ -423,7 +423,7 @@ Add `flake.nix` at the repo root exporting:
   autostart of river with wimy).
 
 Differences from the non-Nix install:
-- **Nix owns login startup.** The module writes `start-at-login #false`
+- **Nix owns login startup.** The module writes `start-at-login false`
   into the generated config so wimy doesn't also register its own
   `SMAppService` agent (two competing agents).
 - **Signing.** Nix builds are sandboxed and can't reach the user's

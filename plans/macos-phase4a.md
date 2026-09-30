@@ -217,7 +217,7 @@ func TestAutostartAdopt(t *testing.T) {
 
 ### Task 3: Config keys and default log path
 
-- [ ] **Tests (RED)** `internal/config`: `status-item #false` and `start-at-login #false` parse; defaults `StatusItem`/`StartAtLogin` true on darwin, false elsewhere (`runtime.GOOS`); non-bool → error. `cmd/wimy`: `TestDefaultLogPath` — darwin → `<home>/Library/Logs/wimy.log`; linux → socket path with `.log`.
+- [ ] **Tests (RED)** `internal/config`: `status-item false` and `start-at-login false` parse; defaults `StatusItem`/`StartAtLogin` true on darwin, false elsewhere (`runtime.GOOS`); non-bool → error. `cmd/wimy`: `TestDefaultLogPath` — darwin → `<home>/Library/Logs/wimy.log`; linux → socket path with `.log`.
 - [ ] **Implement:** `Config.StatusItem`, `Config.StartAtLogin` (doc: macOS only), in `osDefaults`; parse like `focus-follows-mouse`; `ConfigChange.Login bool` (start-at-login changed) and status-item changes reported as `"status-item"` / `"start-at-login"`. `defaultLogPath(goos, home, sock string)` in `cmd/wimy`.
 - [ ] **Commit** ("Add status-item and start-at-login; macOS logs to ~/Library/Logs").
 
@@ -230,7 +230,7 @@ func TestAutostartAdopt(t *testing.T) {
 ### Task 5: macOS permission wait, status item, start at login
 
 - [ ] Bridge: `wimy_status_set(const char *title, const char **items, const int *flags, int n)` builds an `NSStatusItem` menu (flags: enabled, checked, separator); clicks → `goMenuItem(index)`; `wimy_status_remove()`. `int wimy_login_register(int on)` via `SMAppService.agentServiceWithPlistName:@"io.github.jaym.wimy.plist"` (register/unregister; returns status: 0 not registered, 1 enabled, 2 requires approval, -1 not in a bundle); `int wimy_in_bundle(void)` (main bundle id is `io.github.jaym.wimy`); `void wimy_open_accessibility_settings(void)`; `void wimy_start_trust_poll(void)` (1s timer → `goTrustTick`).
-- [ ] Backend: `Run` inits the app; trusted → `start()`; else status item "wimy ⚠ needs Accessibility" with "Open Privacy & Security…", prompt once, poll; when granted → `start()`. Status menu rebuilt in `apply` when views/focused view/login status change: views (checked = shown on the focused output) → `view <name>`, separator, Reload config → `reload`, Open config → `spawn open -t <path>`, Restart wimy → `restart`, separator, "Accessibility: allowed", "Start at login: on/off/needs approval" (disabled), separator, Quit wimy → `quit`. `status-item #false` removes it. `start-at-login` applied at start and on reload when in the bundle.
+- [ ] Backend: `Run` inits the app; trusted → `start()`; else status item "wimy ⚠ needs Accessibility" with "Open Privacy & Security…", prompt once, poll; when granted → `start()`. Status menu rebuilt in `apply` when views/focused view/login status change: views (checked = shown on the focused output) → `view <name>`, separator, Reload config → `reload`, Open config → `spawn open -t <path>`, Restart wimy → `restart`, separator, "Accessibility: allowed", "Start at login: on/off/needs approval" (disabled), separator, Quit wimy → `quit`. `status-item false` removes it. `start-at-login` applied at start and on reload when in the bundle.
 - [ ] Commit ("macOS: menu bar item, permission wait, start at login").
 
 ### Task 6: Bundle, signing, install

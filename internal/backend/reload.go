@@ -18,6 +18,7 @@ type ConfigChange struct {
 	Border   bool // border width or colors
 	Titlebar bool // titlebar height or colors
 	BarGap   bool // reserved top space: re-read screen areas
+	Status   bool // status-item or start-at-login changed (macOS)
 }
 
 // notifyError surfaces a reload failure on the desktop; tests replace it.
@@ -54,6 +55,7 @@ func (c *Core) applyConfig(newCfg *config.Config) []string {
 		Border:   old.Border != newCfg.Border,
 		Titlebar: old.Titlebar != newCfg.Titlebar,
 		BarGap:   old.BarGap != newCfg.BarGap,
+		Status:   old.StatusItem != newCfg.StatusItem || old.StartAtLogin != newCfg.StartAtLogin,
 	}
 	c.Cfg = newCfg
 	c.platform.ApplyConfigChange(ch)
@@ -78,6 +80,12 @@ func (c *Core) applyConfig(newCfg *config.Config) []string {
 	}
 	if ch.BarGap {
 		changes = append(changes, "bar-gap")
+	}
+	if old.StatusItem != newCfg.StatusItem {
+		changes = append(changes, "status-item")
+	}
+	if old.StartAtLogin != newCfg.StartAtLogin {
+		changes = append(changes, "start-at-login")
 	}
 	if old.Terminal != newCfg.Terminal {
 		changes = append(changes, "terminal")

@@ -423,13 +423,13 @@ func ResizeColumns(c, n *Column, shift float64) {
 	n.Factor -= shift
 }
 
-// SpreadColumns redistributes the active view's tiled windows, in
+// SpreadColumns redistributes the named view's tiled windows, in
 // order, over up to maxCols equal-width columns: window i of n goes to
 // column i*k/n. The floating layer and the focused window are kept.
 // Backends that adopt a desktop full of existing windows (macOS at
 // startup) use it instead of stacking them all in one column.
-func (s *State) SpreadColumns(maxCols int) {
-	v := s.activeView()
+func (s *State) SpreadColumns(view string, maxCols int) {
+	v := s.View(view)
 	if v == nil {
 		return
 	}

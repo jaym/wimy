@@ -641,7 +641,7 @@ func TestSpreadColumns(t *testing.T) {
 	}
 	s.FocusWindow(4)
 
-	s.SpreadColumns(3)
+	s.SpreadColumns("1", 3)
 
 	want := [][]WindowID{{1, 2}, {3, 4}, {5}}
 	if got := columnsOf(s); !reflect.DeepEqual(got, want) {
@@ -660,7 +660,7 @@ func TestSpreadColumns(t *testing.T) {
 func TestSpreadColumnsFewerWindowsThanColumns(t *testing.T) {
 	s := newTestState(t)
 	s.AddWindow(2, false)
-	s.SpreadColumns(3)
+	s.SpreadColumns("1", 3)
 	if got, want := columnsOf(s), [][]WindowID{{1}, {2}}; !reflect.DeepEqual(got, want) {
 		t.Errorf("columns = %v, want %v", got, want)
 	}
@@ -670,7 +670,7 @@ func TestSpreadColumnsKeepsFloating(t *testing.T) {
 	s := newTestState(t)
 	s.AddWindow(2, true)
 	s.AddWindow(3, false)
-	s.SpreadColumns(3)
+	s.SpreadColumns("1", 3)
 	v := s.activeView()
 	if got, want := columnsOf(s), [][]WindowID{{1}, {3}}; !reflect.DeepEqual(got, want) {
 		t.Errorf("columns = %v, want %v", got, want)
@@ -686,8 +686,21 @@ func TestSpreadColumnsKeepsFloating(t *testing.T) {
 func TestSpreadColumnsOneColumnIsNoop(t *testing.T) {
 	s := newTestState(t)
 	s.AddWindow(2, false)
-	s.SpreadColumns(1)
+	s.SpreadColumns("1", 1)
 	if got, want := columnsOf(s), [][]WindowID{{1, 2}}; !reflect.DeepEqual(got, want) {
 		t.Errorf("columns = %v, want %v", got, want)
+	}
+}
+
+func TestSpreadColumnsNamedView(t *testing.T) {
+	s := newTestState(t)
+	s.AddWindow(2, false, "web")
+	s.AddWindow(3, false, "web")
+	s.SpreadColumns("web", 3)
+	if n := len(s.View("web").Columns); n != 2 {
+		t.Errorf("web view columns = %d, want 2", n)
+	}
+	if n := len(s.View("1").Columns); n != 1 {
+		t.Errorf("view 1 has %d columns, want it untouched", n)
 	}
 }

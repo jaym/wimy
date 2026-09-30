@@ -124,7 +124,9 @@ func (b *Backend) Run(ctx context.Context) error {
 	C.wimy_start_tracking()
 	// the windows already open would otherwise all stack in one
 	// column (new windows join the focused column, as in wmii)
-	b.State.SpreadColumns(spreadColumnCount(b.usableW))
+	for _, o := range b.State.Outputs {
+		b.State.SpreadColumns(o.View, spreadColumnCount(b.usableW))
+	}
 	b.StartAutostart()
 	b.markDirty()
 	C.wimy_app_run()

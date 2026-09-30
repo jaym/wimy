@@ -3,6 +3,7 @@
 // are added to the main run loop; workspace notifications and Carbon
 // hotkey events are delivered there too.
 #import <AppKit/AppKit.h>
+#import <QuartzCore/QuartzCore.h>
 #include <ApplicationServices/ApplicationServices.h>
 #include <Carbon/Carbon.h>
 #include <pthread.h>
@@ -463,6 +464,7 @@ int wimy_screens(wimy_screen *out, int max) {
 			out[n].visible = (wimy_rect){v.origin.x, v.origin.y, v.size.width, v.size.height};
 			out[n].display = [s.deviceDescription[@"NSScreenNumber"] unsignedIntValue];
 			strlcpy(out[n].name, s.localizedName.UTF8String ?: "", sizeof out[n].name);
+			out[n].scale = s.backingScaleFactor;
 			n++;
 		}
 		return n;
@@ -551,4 +553,114 @@ void wimy_window_close(uint32_t wid) {
 		AXUIElementPerformAction((AXUIElementRef)btn, kAXPressAction);
 	}
 	if (btn) CFRelease(btn);
+}
+
+// --- decorations ---
+
+// WimyDecoView is a frame panel's content: a layer filled with the
+// border color and a "bar" sublayer showing the titlebar image. Clicks
+// focus the window it decorates.
+@interface WimyDecoView : NSView
+@property uint32_t wid;
+@property(strong) CALayer *bar;
+@end
+
+@implementation WimyDecoView
+- (BOOL)acceptsFirstMouse:(NSEvent *)e {
+	return YES;
+}
+- (BOOL)isFlipped {
+	return YES; // bar at the top, like the model's coordinates
+}
+- (void)mouseDown:(NSEvent *)e {
+	goDecoClicked(self.wid);
+}
+@end
+
+static NSMutableDictionary<NSNumber *, NSPanel *> *decos;
+
+static NSPanel *deco_panel(uint32_t wid) {
+	if (!decos) decos = [NSMutableDictionary dictionary];
+	NSPanel *p = decos[@(wid)];
+	if (p) return p;
+	p = [[NSPanel alloc] initWithContentRect:NSMakeRect(0, 0, 1, 1)
+	                               styleMask:NSWindowStyleMaskBorderless | NSWindowStyleMaskNonactivatingPanel
+	                                 backing:NSBackingStoreBuffered
+	                                   defer:NO];
+	p.backgroundColor = [NSColor clearColor];
+	p.opaque = NO;
+	p.hasShadow = NO;
+	p.releasedWhenClosed = NO;
+	p.hidesOnDeactivate = NO;
+	p.becomesKeyOnlyIfNeeded = YES;
+	p.collectionBehavior = NSWindowCollectionBehaviorManaged | NSWindowCollectionBehaviorIgnoresCycle |
+	                       NSWindowCollectionBehaviorFullScreenNone;
+	WimyDecoView *v = [[WimyDecoView alloc] initWithFrame:NSMakeRect(0, 0, 1, 1)];
+	v.wid = wid;
+	v.wantsLayer = YES;
+	v.bar = [CALayer layer];
+	v.bar.contentsGravity = kCAGravityResize;
+	[v.layer addSublayer:v.bar];
+	p.contentView = v;
+	decos[@(wid)] = p;
+	return p;
+}
+
+static CGColorRef argb_color(uint32_t c) {
+	return CGColorCreateSRGB(((c >> 16) & 0xff) / 255.0, ((c >> 8) & 0xff) / 255.0, (c & 0xff) / 255.0,
+	                         ((c >> 24) & 0xff) / 255.0);
+}
+
+void wimy_deco_update(uint32_t wid, wimy_rect frame, double barH, uint32_t fill_argb, int fill, int front) {
+	@autoreleasepool {
+		NSPanel *p = deco_panel(wid);
+		WimyDecoView *v = (WimyDecoView *)p.contentView;
+		[CATransaction begin];
+		[CATransaction setDisableActions:YES];
+		[p setFrame:NSMakeRect(frame.x, frame.y, frame.w, frame.h) display:NO];
+		CGColorRef c = argb_color(fill_argb);
+		v.layer.backgroundColor = fill ? c : NULL;
+		CGColorRelease(c);
+		v.bar.frame = CGRectMake(0, 0, frame.w, barH);
+		v.bar.hidden = barH <= 0;
+		[CATransaction commit];
+		if (front)
+			[p orderWindow:NSWindowAbove relativeTo:0];
+		else
+			[p orderWindow:NSWindowBelow relativeTo:(NSInteger)wid];
+	}
+}
+
+void wimy_deco_image(uint32_t wid, const void *bgra, int pw, int ph) {
+	@autoreleasepool {
+		NSPanel *p = deco_panel(wid);
+		WimyDecoView *v = (WimyDecoView *)p.contentView;
+		CFDataRef data = CFDataCreate(NULL, bgra, (CFIndex)pw * ph * 4);
+		CGDataProviderRef prov = CGDataProviderCreateWithCFData(data);
+		CGColorSpaceRef cs = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+		CGImageRef img = CGImageCreate(pw, ph, 8, 32, (size_t)pw * 4, cs,
+		                               kCGBitmapByteOrder32Little | kCGImageAlphaPremultipliedFirst, prov, NULL, false,
+		                               kCGRenderingIntentDefault);
+		[CATransaction begin];
+		[CATransaction setDisableActions:YES];
+		v.bar.contents = (__bridge id)img;
+		v.bar.contentsScale = p.backingScaleFactor;
+		[CATransaction commit];
+		CGImageRelease(img);
+		CGColorSpaceRelease(cs);
+		CGDataProviderRelease(prov);
+		CFRelease(data);
+	}
+}
+
+void wimy_deco_hide(uint32_t wid) {
+	[decos[@(wid)] orderOut:nil];
+}
+
+void wimy_deco_destroy(uint32_t wid) {
+	NSPanel *p = decos[@(wid)];
+	if (!p) return;
+	[p orderOut:nil];
+	[p close];
+	[decos removeObjectForKey:@(wid)];
 }

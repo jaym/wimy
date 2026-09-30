@@ -12,6 +12,7 @@ type screenInfo struct {
 	Frame, Visible Frame
 	Display        uint32 // CGDirectDisplayID, stable while connected
 	Name           string // localizedName
+	Scale          int32  // backingScaleFactor (2 on Retina); 0 = unknown
 }
 
 // outputSpec is a screen as a model output, in model coordinates.
@@ -21,6 +22,7 @@ type outputSpec struct {
 	Display uint32
 	Full    wm.Rect
 	Usable  wm.Rect
+	Scale   int32 // pixels per point, at least 1
 }
 
 // outputsFor converts screens to outputs. Names are the screens'
@@ -52,7 +54,8 @@ func outputsFor(screens []screenInfo, barGap int32) []outputSpec {
 			usable.H -= top - usable.Y
 			usable.Y = top
 		}
-		outs = append(outs, outputSpec{Name: name, base: base, Display: s.Display, Full: full, Usable: usable})
+		outs = append(outs, outputSpec{Name: name, base: base, Display: s.Display, Full: full, Usable: usable,
+			Scale: max(s.Scale, 1)})
 	}
 	return outs
 }

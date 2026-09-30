@@ -2,7 +2,7 @@ package macos
 
 /*
 #cgo CFLAGS: -x objective-c -fobjc-arc -Wno-deprecated-declarations
-#cgo LDFLAGS: -framework AppKit -framework ApplicationServices -framework Carbon
+#cgo LDFLAGS: -framework AppKit -framework ApplicationServices -framework Carbon -framework QuartzCore
 #include "bridge.h"
 */
 import "C"
@@ -11,17 +11,20 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"os/user"
 	"path/filepath"
 	"runtime"
 	"runtime/cgo"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 
 	"wimy/internal/backend"
 	"wimy/internal/config"
+	"wimy/internal/titlebar"
 	"wimy/internal/wm"
 )
 
@@ -68,6 +71,11 @@ type Backend struct {
 
 	pids map[wm.WindowID]int // owning app of each window in the model
 
+	// decorations: titlebar renderers by height (titlebar, or stack
+	// strip when titlebars are off) and each window's current image
+	renderers map[int32]*titlebar.Renderer
+	decoKeys  decoCache
+
 	// away remembers the views (tags) of minimized windows, so a
 	// restored window returns to them instead of the focused view.
 	away map[wm.WindowID][]string
@@ -89,6 +97,8 @@ func New(cfg *config.Config, configArg string, notify func()) *Backend {
 		lastShown: make(map[wm.WindowID]wm.Rect),
 		away:      make(map[wm.WindowID][]string),
 		pids:      make(map[wm.WindowID]int),
+		renderers: make(map[int32]*titlebar.Renderer),
+		decoKeys:  decoCache{},
 		notify:    notify,
 	}
 	b.Core = backend.NewCore(cfg, configArg, b)
@@ -269,6 +279,11 @@ func (b *Backend) ApplyConfigChange(ch backend.ConfigChange) {
 	if ch.BarGap {
 		b.syncScreens()
 	}
+	if ch.Border || ch.Titlebar {
+		// colors, border width or height changed: re-render everything
+		clear(b.renderers)
+		clear(b.decoKeys)
+	}
 }
 
 // Kill implements backend.Platform by pressing the window's close
@@ -290,13 +305,13 @@ func goApply() {
 func (b *Backend) apply() {
 	b.scheduled = false
 	b.DrainQueue()
-	// wimy draws no titlebars on macOS until Phase 3: reserve no space
-	b.State.TitlebarHeight = 0
-
 	var moved []wm.Placement
 	start := time.Now()
-	for _, p := range b.State.Layout() {
-		if p.Hidden {
+	placements := b.State.Layout()
+	for _, p := range placements {
+		// macOS can't clip another app's window: a collapsed stack
+		// window is parked like a hidden one and only its strip shows
+		if p.Hidden || p.Collapsed {
 			b.hide(p.ID)
 			continue
 		}
@@ -322,6 +337,11 @@ func (b *Backend) apply() {
 		b.checkFrames(moved)
 	}
 
+	// decorations go behind their windows, so after the windows moved
+	for _, p := range placements {
+		b.decorate(p)
+	}
+
 	b.checkSecureInput()
 	switch f := b.State.Focused; {
 	case f != 0 && f != b.lastFocus:
@@ -338,6 +358,69 @@ func (b *Backend) apply() {
 	if b.notify != nil {
 		b.notify()
 	}
+}
+
+// decorate shows (or hides) a window's frame panel: titlebar and border
+// behind it, or the titlebar strip of a collapsed stack window.
+func (b *Backend) decorate(p wm.Placement) {
+	id := C.uint32_t(p.ID)
+	d, ok := decoFor(p, b.Cfg.Titlebar.Height, b.Cfg.Border.Width)
+	if !ok || len(b.outputs) == 0 {
+		C.wimy_deco_hide(id)
+		return
+	}
+	col := b.Cfg.Border.Normal
+	if p.Focused {
+		col = b.Cfg.Border.Focused
+	}
+	f := fromModel(d.Panel, float64(b.outputs[0].Full.H))
+	C.wimy_deco_update(id, C.wimy_rect{x: C.double(f.X), y: C.double(f.Y), w: C.double(f.W), h: C.double(f.H)},
+		C.double(d.BarH), C.uint32_t(argb(col)), cbool(d.Fill), cbool(d.Front))
+	if d.BarH <= 0 {
+		return
+	}
+	title := ""
+	if w := b.State.Windows[p.ID]; w != nil {
+		title = w.Title
+	}
+	scale := b.scaleOf(p.Output)
+	if !b.decoKeys.stale(p.ID, decoKey{Title: title, Focused: p.Focused, W: d.Panel.W, H: d.BarH, Scale: scale}) {
+		return
+	}
+	px := b.renderer(d.BarH).Render(d.Panel.W, scale, title, p.Focused)
+	C.wimy_deco_image(id, unsafe.Pointer(&px[0]), C.int(max(d.Panel.W, 1)*scale), C.int(d.BarH*scale))
+}
+
+// renderer returns the titlebar renderer for bars of height h.
+func (b *Backend) renderer(h int32) *titlebar.Renderer {
+	r := b.renderers[h]
+	if r == nil {
+		r = backend.NewTitlebarRenderer(b.Cfg, h)
+		b.renderers[h] = r
+	}
+	return r
+}
+
+// scaleOf returns the pixel scale of the named output.
+func (b *Backend) scaleOf(output string) int32 {
+	for _, o := range b.outputs {
+		if o.Name == output {
+			return o.Scale
+		}
+	}
+	return 1
+}
+
+func argb(c config.Color) uint32 {
+	x := c.RGBA()
+	return uint32(x.A)<<24 | uint32(x.R)<<16 | uint32(x.G)<<8 | uint32(x.B)
+}
+
+func cbool(v bool) C.int {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 // frameRetryDelay is how long apply waits before re-sending a frame
@@ -396,7 +479,7 @@ func (b *Backend) syncScreens() {
 	for i := range screens {
 		s := buf[i]
 		screens[i] = screenInfo{Frame: frameOf(s.frame), Visible: frameOf(s.visible),
-			Display: uint32(s.display), Name: C.GoString(&s.name[0])}
+			Display: uint32(s.display), Name: C.GoString(&s.name[0]), Scale: int32(math.Round(float64(s.scale)))}
 	}
 	outs := keepNames(b.outputs, outputsFor(screens, b.Cfg.BarGap))
 	prev := make(map[uint32]bool, len(b.outputs))
@@ -499,6 +582,9 @@ func (b *Backend) unhideAll() {
 	}
 	clear(b.hidden)
 	clear(b.parked)
+	for id := range b.known {
+		C.wimy_deco_hide(C.uint32_t(id))
+	}
 	b.saveHidden()
 }
 
@@ -610,6 +696,8 @@ func (b *Backend) dropWindow(id wm.WindowID, exists bool) {
 	}
 	delete(b.parked, id)
 	delete(b.lastShown, id)
+	C.wimy_deco_destroy(C.uint32_t(id))
+	delete(b.decoKeys, id)
 	b.applied.forget(id)
 	b.State.RemoveWindow(id)
 	b.markDirty()
@@ -646,6 +734,19 @@ func goFocusChanged(wid C.uint32_t, pid C.int) {
 	b.State.FocusWindow(id)
 	b.lastFocus = b.State.Focused // already in front: don't activate it again
 	b.markDirty()
+}
+
+// goDecoClicked: a click on a window's titlebar, border or stack strip
+// focuses it (a strip expands).
+//
+//export goDecoClicked
+func goDecoClicked(wid C.uint32_t) {
+	b, id := current, wm.WindowID(wid)
+	defer b.guard()
+	if b.known[id] {
+		b.State.FocusWindow(id)
+		b.markDirty()
+	}
 }
 
 //export goSecureInputTick

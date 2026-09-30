@@ -9,7 +9,7 @@ import (
 // laptop: 1512x982 primary; BenQ 2560x1707 to its right, top-aligned.
 func twoScreens(visibleTopInset float64) []screenInfo {
 	return []screenInfo{
-		{Name: "Built-in", Display: 1, Frame: Frame{0, 0, 1512, 982}, Visible: Frame{0, 0, 1512, 982 - visibleTopInset}},
+		{Name: "Built-in", Display: 1, Scale: 2, Frame: Frame{0, 0, 1512, 982}, Visible: Frame{0, 0, 1512, 982 - visibleTopInset}},
 		{Name: "BenQ", Display: 2, Frame: Frame{1512, 982 - 1707, 2560, 1707}, Visible: Frame{1512, 982 - 1707, 2560, 1707 - visibleTopInset}},
 	}
 }
@@ -24,6 +24,9 @@ func TestOutputsForMenuBarHidden(t *testing.T) {
 	}
 	if want := (wm.Rect{X: 0, Y: 37, W: 1512, H: 945}); outs[0].Usable != want {
 		t.Errorf("usable = %+v, want %+v (bar gap below the top edge)", outs[0].Usable, want)
+	}
+	if outs[0].Scale != 2 || outs[1].Scale != 1 {
+		t.Errorf("scales = %d, %d; want 2 (retina) and 1 (unknown -> 1)", outs[0].Scale, outs[1].Scale)
 	}
 	if want := (wm.Rect{X: 1512, Y: 37, W: 2560, H: 1670}); outs[1].Usable != want {
 		t.Errorf("second usable = %+v, want %+v", outs[1].Usable, want)

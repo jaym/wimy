@@ -10,6 +10,7 @@ typedef struct {
 	wimy_rect visible; // frame minus menu bar and Dock
 	uint32_t display;  // CGDirectDisplayID
 	char name[128];    // localizedName, UTF-8
+	double scale;      // backingScaleFactor
 } wimy_screen;
 
 int wimy_ax_trusted(int prompt);
@@ -38,6 +39,16 @@ int wimy_window_set_position(uint32_t wid, double x, double y); // 0 or the AXEr
 uint32_t wimy_focused_window(void); // frontmost app's focused tracked window, or 0
 void wimy_start_secure_input_poll(void); // goSecureInputTick every 2s
 int wimy_focus_none(void); // activate Finder (keys go nowhere); returns its pid or 0
+
+// Decorations: one frame panel per window, directly behind it (or in
+// front, for a stack strip whose window is parked). frame is in AppKit
+// coordinates; the titlebar image fills the top barH points; fill is
+// the border color (0xAARRGGBB) drawn behind the window. A click calls
+// goDecoClicked(wid).
+void wimy_deco_update(uint32_t wid, wimy_rect frame, double barH, uint32_t fill_argb, int fill, int front);
+void wimy_deco_image(uint32_t wid, const void *bgra, int pw, int ph); // premultiplied BGRA pixels
+void wimy_deco_hide(uint32_t wid);
+void wimy_deco_destroy(uint32_t wid);
 // Returns 0 on success; the AXError of the position and final size
 // calls go to *perr and *serr (apps sometimes report an error for a
 // frame they did apply, so callers check by reading the frame back).

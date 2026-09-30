@@ -38,14 +38,20 @@ func intersects(a, b wm.Rect) bool {
 	return a.X < b.X+b.W && b.X < a.X+a.W && a.Y < b.Y+b.H && b.Y < a.Y+a.H
 }
 
-// inHideCorner reports whether r sits at a hide spot of some screen
-// (within 2pt, since macOS may clamp): a window left there by a wimy
-// that died before it could restore it.
+// maxClamp is how far up macOS may push a window parked at a screen's
+// bottom edge (observed: 39pt on macOS 26, keeping a strip within
+// reach).
+const maxClamp = 64
+
+// inHideCorner reports whether r sits at a hide spot of some screen: 1pt
+// from its left or right edge (within 2pt), and within maxClamp of its
+// bottom edge. That is a window left there by a wimy that died before
+// it could restore it.
 func inHideCorner(screens []wm.Rect, r wm.Rect) bool {
 	near := func(a, b int32) bool { return a-b <= 2 && b-a <= 2 }
 	for _, s := range screens {
 		bottom := s.Y + s.H - 1
-		if !near(r.Y, bottom) {
+		if r.Y > bottom+2 || r.Y < bottom-maxClamp {
 			continue
 		}
 		if near(r.X, s.X+s.W-1) || near(r.X, s.X-r.W+1) {

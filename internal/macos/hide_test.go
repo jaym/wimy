@@ -59,3 +59,15 @@ func TestCenteredIn(t *testing.T) {
 		t.Errorf("oversized window = %+v, want the whole area %+v", got, area)
 	}
 }
+
+func TestInHideCornerAfterMacOSClamp(t *testing.T) {
+	// observed on macOS 26: parked at x=-503 (bottom-left, 1pt showing),
+	// requested y=981 but macOS clamped it to 942
+	screens := []wm.Rect{laptop, {X: 1512, Y: 0, W: 1920, H: 1280}}
+	if !inHideCorner(screens, wm.Rect{X: -503, Y: 942, W: 504, H: 945}) {
+		t.Errorf("clamped parked window not recognized")
+	}
+	if inHideCorner(screens, wm.Rect{X: 100, Y: 942, W: 504, H: 40}) {
+		t.Errorf("ordinary window near the bottom edge taken for parked")
+	}
+}

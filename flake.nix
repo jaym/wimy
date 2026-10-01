@@ -56,22 +56,45 @@
 
       checks = eachSystem (
         pkgs:
+        let
+          hmCheck = home-manager.lib.homeManagerConfiguration {
+            inherit pkgs;
+            modules = [
+              self.homeManagerModules.wimy
+              {
+                home.username = "wimy";
+                home.homeDirectory = if pkgs.stdenv.hostPlatform.isDarwin then "/Users/wimy" else "/home/wimy";
+                home.stateVersion = "25.05";
+                programs.wimy.enable = true;
+                programs.wimy.settings = ''
+                  terminal "open -na Ghostty"
+                '';
+                programs.wimy.sketchybar.height = 30;
+                programs.wimy.sketchybar.extraConfig = "sketchybar --set clock icon.color=$RED";
+              }
+            ];
+          };
+        in
         lib.optionalAttrs (self.packages.${pkgs.stdenv.hostPlatform.system} ? wimy) {
           # the module evaluates and its activation builds
-          hm-module =
-            (home-manager.lib.homeManagerConfiguration {
-              inherit pkgs;
-              modules = [
-                self.homeManagerModules.wimy
-                {
-                  home.username = "wimy";
-                  home.homeDirectory = if pkgs.stdenv.hostPlatform.isDarwin then "/Users/wimy" else "/home/wimy";
-                  home.stateVersion = "25.05";
-                  programs.wimy.enable = true;
-                  programs.wimy.settings = "bar-gap 37";
-                }
-              ];
-            }).activationPackage;
+          hm-module = hmCheck.activationPackage;
+        }
+        // lib.optionalAttrs (pkgs.stdenv.hostPlatform.isDarwin && self.packages.${pkgs.stdenv.hostPlatform.system} ? wimy) {
+          # the bundled SketchyBar: bar config installed, wimy's bar-gap
+          # matches the bar, the user's settings come after it
+          hm-sketchybar = pkgs.runCommand "wimy-hm-sketchybar-check" { } ''
+            files=${hmCheck.config.home-files}
+            set -x
+            grep -qx 'bar-gap 30' $files/.config/wimy/config.kdl
+            grep -qx 'terminal "open -na Ghostty"' $files/.config/wimy/config.kdl
+            grep -qx 'BAR_HEIGHT=30' $files/.config/sketchybar/settings.sh
+            grep -q 'Wimy.app/Contents/MacOS/wimyctl' $files/.config/sketchybar/settings.sh
+            grep -qx 'sketchybar --set clock icon.color=$RED' $files/.config/sketchybar/extra.sh
+            test -x $files/.config/sketchybar/sketchybarrc
+            test -x $files/.config/sketchybar/plugins/wimy.sh
+            ${pkgs.bash}/bin/bash -n $files/.config/sketchybar/sketchybarrc
+            touch $out
+          '';
         }
       );
     };

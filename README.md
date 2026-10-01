@@ -312,6 +312,33 @@ make mac-install            # build, sign and install ~/Applications/Wimy.app
 The first signing asks for your login password to let `codesign` use
 the key: choose **Always Allow**, or every build asks again.
 
+**With Nix (home-manager)**, the flake's module installs the signed
+release and sets up a bar, batteries included:
+
+```nix
+# flake inputs
+wimy.url = "github:jaym/wimy";
+wimy.inputs.nixpkgs.follows = "nixpkgs";
+wimy.inputs.home-manager.follows = "home-manager";
+
+# home-manager configuration
+imports = [ inputs.wimy.homeManagerModules.wimy ];
+programs.wimy.enable = true;
+programs.wimy.settings = ''
+  // your config.kdl (wimy's defaults apply to the rest)
+'';
+```
+
+Every switch installs `~/Applications/Wimy.app` (and `wimyctl` in
+`~/.local/bin`) and restarts a running wimy in place. It also sets up
+[SketchyBar](contrib/macos/sketchybar/) with wimy's views and column
+mode, its Nerd Font, the native menu bar auto-hidden, and `bar-gap`
+matching the bar (`programs.wimy.sketchybar.height`, `.extraConfig` for
+your own items, `.font`, `.hideMenuBar`). Set
+`programs.wimy.sketchybar.enable = false` to configure the bar yourself,
+and `programs.wimy.settings = null` to manage `config.kdl` yourself (for
+instance as an out-of-store link, for live `wimyctl run reload` edits).
+
 `make mac-install` puts `wimyctl` in `~/.local/bin` and starts Wimy, or,
 if it is running, restarts it in place with the new version: views,
 tags, columns, floating windows and parked windows all carry over
@@ -365,8 +392,9 @@ Accessibility) for whatever starts it — for now the terminal you run
   is undone at once — it would leave holes in the tiling.
 - **Bars:** with a bar wimy can't see, such as
   [SketchyBar](contrib/macos/sketchybar/), set `bar-gap` to its height
-  (points reserved at the top of every screen). The SketchyBar plugin
-  shows the views and the column mode like the waybar modules.
+  (points reserved at the top of every screen). wimy's SketchyBar config
+  shows the views and the column mode like the waybar modules (the Nix
+  module sets it all up).
 - **Control socket:** `/tmp/wimy-<uid>/wimy.sock`, a private per-user
   directory, so bars started by launchd (which get no `TMPDIR`) find it.
 

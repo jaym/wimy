@@ -1,0 +1,142 @@
+#!/bin/bash
+
+# SketchyBar config for wimy: wimy's views and column mode on the left,
+# system status on the right. Catppuccin Macchiato, flat modules,
+# hairline separators, coloured icons, a subtle highlight on hover
+# (styled after wimy's waybar theme).
+# Docs: https://felixkratz.github.io/SketchyBar/
+#
+# The home-manager module (programs.wimy.sketchybar) installs this
+# directory as ~/.config/sketchybar and writes settings.sh (bar height,
+# font, wimyctl path) and extra.sh (programs.wimy.sketchybar.extraConfig).
+# Without them the defaults below apply: copy the directory to
+# ~/.config/sketchybar to use it by hand.
+
+source "$CONFIG_DIR/colors.sh"
+source "$CONFIG_DIR/icons.sh"
+
+# 37pt matches the notched MacBook menu bar, so the native bar fully covers
+# this one when it slides in instead of leaving a strip showing. wimy's
+# `bar-gap` must match it.
+BAR_HEIGHT=37
+FONT="MesloLGM Nerd Font"
+# wimyctl: Wimy.app's (make mac-install links it into ~/.local/bin,
+# which isn't on this agent's PATH), else the one on PATH.
+WIMYCTL=wimyctl
+[ -x "$HOME/.local/bin/wimyctl" ] && WIMYCTL="$HOME/.local/bin/wimyctl"
+[ -f "$CONFIG_DIR/settings.sh" ] && source "$CONFIG_DIR/settings.sh"
+export WIMYCTL
+
+PLUGIN_DIR="$CONFIG_DIR/plugins"
+
+sketchybar --bar position=top \
+                 height=$BAR_HEIGHT \
+                 color=$BASE \
+                 border_width=0 \
+                 shadow=off \
+                 padding_left=6 \
+                 padding_right=6
+
+sketchybar --default updates=when_shown \
+                     icon.font="$FONT:Regular:17.0" \
+                     label.font="$FONT:Bold:13.0" \
+                     icon.color=$TEXT \
+                     label.color=$SUBTEXT0 \
+                     padding_left=0 \
+                     padding_right=0 \
+                     icon.padding_left=12 \
+                     icon.padding_right=6 \
+                     label.padding_left=0 \
+                     label.padding_right=12 \
+                     background.color=$MANTLE \
+                     background.height=$BAR_HEIGHT \
+                     background.drawing=off
+
+# A 1pt vertical rule between modules, like waybar's border-left hairlines.
+separator() {
+  sketchybar --add item "$1" "$2" \
+             --set "$1" width=1 \
+                        icon.drawing=off \
+                        label.drawing=off \
+                        background.drawing=on \
+                        background.color=$SURFACE1 \
+                        background.height=18
+}
+
+# --- Left: apple menu + focused app ---
+
+sketchybar --add item apple left \
+           --set apple icon="$ICON_APPLE" \
+                       icon.color=$BLUE \
+                       icon.padding_right=12 \
+                       label.drawing=off \
+                       click_script="open -a 'System Settings'" \
+                       script="$PLUGIN_DIR/hover.sh" \
+           --subscribe apple mouse.entered mouse.exited
+
+separator sep_app left
+
+sketchybar --add item front_app left \
+           --set front_app icon="$ICON_WINDOW" \
+                           icon.color=$MAUVE \
+                           label.color=$TEXT \
+                           script="$PLUGIN_DIR/front_app.sh" \
+           --subscribe front_app front_app_switched
+
+# --- wimy: views and column mode, inserted before front_app ---
+# plugins/wimy.sh streams `wimyctl subscribe`; a reload replaces the running
+# copy.
+
+"$PLUGIN_DIR/wimy.sh" &
+
+# --- Right (first added is rightmost) ---
+
+sketchybar --add item clock right \
+           --set clock update_freq=10 \
+                       icon="$ICON_CLOCK" \
+                       icon.color=$LAVENDER \
+                       label.color=$TEXT \
+                       script="$PLUGIN_DIR/clock.sh" \
+                       click_script="open -a Calendar" \
+           --subscribe clock system_woke mouse.entered mouse.exited
+
+separator sep_clock right
+
+sketchybar --add item battery right \
+           --set battery update_freq=120 \
+                         icon.color=$GREEN \
+                         script="$PLUGIN_DIR/battery.sh" \
+                         click_script="open 'x-apple.systempreferences:com.apple.Battery-Settings.extension'" \
+           --subscribe battery system_woke power_source_change mouse.entered mouse.exited
+
+separator sep_battery right
+
+sketchybar --add item volume right \
+           --set volume icon.color=$YELLOW \
+                        script="$PLUGIN_DIR/volume.sh" \
+                        click_script="open 'x-apple.systempreferences:com.apple.Sound-Settings.extension'" \
+           --subscribe volume volume_change mouse.entered mouse.exited
+
+separator sep_volume right
+
+sketchybar --add item wifi right \
+           --set wifi update_freq=30 \
+                      icon.color=$TEAL \
+                      script="$PLUGIN_DIR/wifi.sh" \
+                      click_script="open 'x-apple.systempreferences:com.apple.wifi-settings-extension'" \
+           --subscribe wifi wifi_change system_woke mouse.entered mouse.exited
+
+separator sep_wifi right
+
+sketchybar --add item cpu right \
+           --set cpu update_freq=3 \
+                     icon="$ICON_CPU" \
+                     icon.color=$BLUE \
+                     script="$PLUGIN_DIR/cpu.sh" \
+                     click_script="open -a 'Activity Monitor'" \
+           --subscribe cpu mouse.entered mouse.exited
+
+# Your own items and overrides (programs.wimy.sketchybar.extraConfig).
+[ -f "$CONFIG_DIR/extra.sh" ] && source "$CONFIG_DIR/extra.sh"
+
+sketchybar --update

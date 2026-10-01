@@ -1,0 +1,20 @@
+#!/bin/bash
+
+# Nerd Font (Material Design) glyphs.
+export ICON_APPLE="󰀵"
+export ICON_WINDOW="󰖸"
+export ICON_CPU="󰻠"
+export ICON_CLOCK="󰥔"
+export ICON_WIFI="󰤨"
+export ICON_WIFI_OFF="󰤭"
+export ICON_VOL_HIGH="󰕾"
+export ICON_VOL_MED="󰖀"
+export ICON_VOL_LOW="󰕿"
+export ICON_VOL_MUTE="󰝟"
+export ICON_BAT_100="󰁹"
+export ICON_BAT_80="󰂂"
+export ICON_BAT_60="󰂀"
+export ICON_BAT_40="󰁾"
+export ICON_BAT_20="󰁻"
+export ICON_BAT_0="󰂎"
+export ICON_BAT_CHARGING="󰂄"

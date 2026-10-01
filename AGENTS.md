@@ -237,6 +237,15 @@ go generate ./internal/proto
   usable `PATH` (unexpanded `$HOME`/`$USER` entries), and nix-darwin
   agents may lack `HOME`: hence the `/tmp/wimy-<uid>/` socket, and
   `/usr/bin/jq` in the plugin.
+- Native tabs (Ghostty, Terminal, Finder) are separate windows, but
+  `kAXWindowsAttribute` lists only each group's visible tab: a tab
+  switch makes one window leave the list and another join it, with no
+  create/destroy. `reconcileTabs` (tabs.go) keeps one tile per group by
+  pairing leavers with joiners (`State.ReplaceWindow`).
+- Ghostty never posts `kAXFocusedWindowChangedNotification`, only
+  `kAXMainWindowChangedNotification` (window and tab switches alike):
+  the bridge observes both. A focused window may be untracked (a
+  background tab from before a restart): track it, don't drop it.
 - App hiding is undone on purpose (`unhide_app`); minimized windows keep
   their tags (`away`) so they come back to their views.
 

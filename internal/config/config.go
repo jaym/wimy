@@ -127,8 +127,11 @@ type Config struct {
 	// StartAtLogin registers Wimy.app as a login item (macOS only).
 	StartAtLogin bool
 	Binds        []Bind
-	Actions      map[string]string // name -> shell command
-	Autostart    []string
+	// Swipes maps a three-finger trackpad swipe ("left", "right") to a
+	// command (macOS). None by default: swipes are opt-in.
+	Swipes    map[string]string
+	Actions   map[string]string // name -> shell command
+	Autostart []string
 }
 
 // Default returns the built-in configuration: wmii's key binding set
@@ -470,6 +473,26 @@ func (c *Config) applyNode(n *document.Node) error {
 			return err
 		}
 		c.Binds = append(c.Binds, b)
+
+	case "swipe":
+		dir, err := strArg(n, 0)
+		if err != nil {
+			return err
+		}
+		if dir != "left" && dir != "right" {
+			return fmt.Errorf("swipe %q: want \"left\" or \"right\"", dir)
+		}
+		if len(n.Children) != 1 {
+			return fmt.Errorf("swipe %q: want exactly one command child", dir)
+		}
+		cmd, err := commandString(n.Children[0])
+		if err != nil {
+			return fmt.Errorf("swipe %q: %w", dir, err)
+		}
+		if c.Swipes == nil {
+			c.Swipes = make(map[string]string)
+		}
+		c.Swipes[dir] = cmd
 
 	case "action":
 		// actions merge with (and can override) the defaults

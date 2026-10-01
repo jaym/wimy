@@ -111,3 +111,19 @@ func TestReloadBarGap(t *testing.T) {
 		t.Errorf("platform changes = %+v, want BarGap", p.changes)
 	}
 }
+
+func TestReloadSwipesRebinds(t *testing.T) {
+	c, p, _, path := newReloadCore(t, "")
+	if err := os.WriteFile(path, []byte("swipe \"left\" { view-next; }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.changes) != 1 || !p.changes[0].Binds {
+		t.Fatalf("changes = %+v, want Binds (swipes go with the bindings)", p.changes)
+	}
+	if c.Cfg.Swipes["left"] != "view-next" {
+		t.Errorf("swipes = %v", c.Cfg.Swipes)
+	}
+}

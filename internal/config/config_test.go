@@ -267,3 +267,32 @@ func TestMacOSSettings(t *testing.T) {
 		t.Errorf("non-boolean status-item accepted")
 	}
 }
+
+func TestSwipes(t *testing.T) {
+	load := func(text string) (*Config, error) {
+		p := filepath.Join(t.TempDir(), "config.kdl")
+		if err := os.WriteFile(p, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return Load(p)
+	}
+	if s := Default().Swipes; len(s) != 0 {
+		t.Errorf("swipes are opt-in, default %v", s)
+	}
+	c, err := load("swipe \"left\" { view-next; }\nswipe \"right\" { view \"web\"; }\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Swipes["left"] != "view-next" || c.Swipes["right"] != "view web" || len(c.Swipes) != 2 {
+		t.Errorf("swipes = %v", c.Swipes)
+	}
+	for _, bad := range []string{
+		"swipe \"up\" { view-next; }\n",              // only left and right
+		"swipe \"left\"\n",                           // no command
+		"swipe \"left\" { view-next; view-prev; }\n", // two commands
+	} {
+		if _, err := load(bad); err == nil {
+			t.Errorf("%q: no error", bad)
+		}
+	}
+}

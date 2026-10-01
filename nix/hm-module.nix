@@ -43,12 +43,18 @@ let
   '';
 
   menuOn = isDarwin && cfg.menu.enable;
+  swipeOn = isDarwin && cfg.swipe.enable;
   kdlString = s: "\"" + lib.escape [ "\\" "\"" ] s + "\"";
 
   # wimy's own config: the module's lines first, so the user's settings
   # can override them
   configText =
     lib.optionalString menuOn "// the choose picker (programs.wimy.menu)\nmenu ${kdlString cfg.menu.command}\n"
+    + lib.optionalString swipeOn ''
+      // three-finger swipes (programs.wimy.swipe)
+      swipe "left" { view-next; }
+      swipe "right" { view-prev; }
+    ''
     + lib.optionalString barOn "// reserved for SketchyBar (programs.wimy.sketchybar.height)\nbar-gap ${toString bar.height}\n"
     + lib.optionalString (builtins.isString cfg.settings) cfg.settings;
 in
@@ -103,6 +109,18 @@ in
           colors and the bar's font by default.
         '';
       };
+    };
+
+    swipe.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        macOS: switch views with three-finger trackpad swipes (fingers
+        left: the next view, like macOS Spaces; right: the previous).
+        Moves macOS's own swipe between Spaces to four fingers so the
+        two don't fight; that takes a logout. More swipe commands go in
+        `settings` (`swipe "left" { ... }`).
+      '';
     };
 
     windowCornerRadius = lib.mkOption {
@@ -200,6 +218,16 @@ in
         targets.darwin.defaults.NSGlobalDomain._HIHideMenuBar = lib.mkIf bar.hideMenuBar true;
       })
       (lib.mkIf menuOn { home.packages = [ pkgs.choose-gui ]; })
+      (lib.mkIf swipeOn {
+        # three fingers to wimy, four to macOS's Spaces (as nix-darwin's
+        # system.defaults.trackpad: built-in and Bluetooth trackpads)
+        targets.darwin.defaults =
+          lib.genAttrs [ "com.apple.AppleMultitouchTrackpad" "com.apple.driver.AppleBluetoothMultitouch.trackpad" ]
+            (_: {
+              TrackpadThreeFingerHorizSwipeGesture = 0;
+              TrackpadFourFingerHorizSwipeGesture = 2;
+            });
+      })
       (lib.mkIf (isDarwin && cfg.windowCornerRadius != null) {
         targets.darwin.defaults.NSGlobalDomain.NSConvolutionOverride1 = cfg.windowCornerRadius;
       })

@@ -170,33 +170,51 @@ func (t tapKeys) keyDown(code uint16, flags uint64, repeat bool) (id int, run, s
 	return id, !repeat, true
 }
 
-// tapRouter holds the bindings the event tap delivers. The tap runs on
-// its own thread (so blocking AX calls on the main thread never stall
+// tapRouter holds the bindings the key tap delivers and the swipe
+// commands the gesture tap delivers. The key tap runs on its own
+// thread (so blocking AX calls on the main thread never stall
 // system-wide typing), while reload replaces the bindings on the main
 // thread; the table is swapped atomically. The zero value delivers
 // nothing.
 type tapRouter struct {
 	table atomic.Pointer[tapTable]
+	swipe swipeDetector // gesture tap (main thread) only
 }
 
 type tapTable struct {
-	keys tapKeys
-	cmds []string // by hotkey index
+	keys   tapKeys
+	cmds   []string          // by hotkey index
+	swipes map[string]string // "left"/"right" -> command
 }
 
-// set replaces the bindings with the tap-delivered ones among keys.
-func (r *tapRouter) set(keys []hotkey) {
-	t := &tapTable{keys: newTapKeys(keys), cmds: make([]string, len(keys))}
+// set replaces the bindings with the tap-delivered ones among keys,
+// and the swipe commands with swipes.
+func (r *tapRouter) set(keys []hotkey, swipes map[string]string) {
+	t := &tapTable{keys: newTapKeys(keys), cmds: make([]string, len(keys)), swipes: swipes}
 	for i, k := range keys {
 		t.cmds[i] = k.cmd
 	}
 	r.table.Store(t)
 }
 
-// active reports whether any binding goes through the tap.
+// active reports whether any binding goes through the key tap.
 func (r *tapRouter) active() bool {
 	t := r.table.Load()
 	return t != nil && len(t.keys) > 0
+}
+
+// touch feeds a trackpad sample (fingers, average x) to the swipe
+// detector and returns the command of a swipe it completes, or "".
+// Main thread (the gesture tap) only.
+func (r *tapRouter) touch(fingers int, x float64) string {
+	t := r.table.Load()
+	if t == nil || len(t.swipes) == 0 {
+		return ""
+	}
+	if dir := r.swipe.touch(fingers, x); dir != "" {
+		return t.swipes[dir]
+	}
+	return ""
 }
 
 // keyDown is tapKeys.keyDown on the current table, returning the

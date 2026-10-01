@@ -156,7 +156,7 @@ func TestTapRouterEmptyPassesEverything(t *testing.T) {
 func TestTapRouterSetAndMatch(t *testing.T) {
 	var r tapRouter
 	keys, _ := hotkeysFor(binds(t, "Mod-h", "focus left", "Ctrl-Option-l", "focus right"))
-	r.set(keys)
+	r.set(keys, nil)
 	if cmd, run, swallow := r.keyDown(0x04, tOption, false); !run || !swallow || cmd != "focus left" {
 		t.Errorf("Option-h: cmd=%q run=%v swallow=%v", cmd, run, swallow)
 	}
@@ -166,7 +166,7 @@ func TestTapRouterSetAndMatch(t *testing.T) {
 	if !r.active() {
 		t.Errorf("router with a tap binding reports inactive")
 	}
-	r.set(nil)
+	r.set(nil, nil)
 	if r.active() {
 		t.Errorf("router without tap bindings reports active")
 	}
@@ -190,9 +190,9 @@ func TestTapRouterConcurrent(t *testing.T) {
 	}()
 	for i := 0; i < 2000; i++ {
 		if i%2 == 0 {
-			r.set(a)
+			r.set(a, nil)
 		} else {
-			r.set(b)
+			r.set(b, nil)
 		}
 	}
 	<-done

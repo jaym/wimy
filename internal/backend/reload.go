@@ -13,7 +13,7 @@ import (
 // ConfigChange lists the reloaded config sections a platform must
 // apply itself; everything else the Core applies.
 type ConfigChange struct {
-	Binds    bool // key bindings: recreate and re-enable
+	Binds    bool // key bindings or swipes: recreate and re-enable
 	Mod      bool // primary modifier: recreate pointer bindings
 	Border   bool // border width or colors
 	Titlebar bool // titlebar height or colors
@@ -50,7 +50,7 @@ func (c *Core) Reload() error {
 func (c *Core) applyConfig(newCfg *config.Config) []string {
 	old := c.Cfg
 	ch := ConfigChange{
-		Binds:    !slices.Equal(old.Binds, newCfg.Binds),
+		Binds:    !slices.Equal(old.Binds, newCfg.Binds) || !maps.Equal(old.Swipes, newCfg.Swipes),
 		Mod:      old.ModMask != newCfg.ModMask,
 		Border:   old.Border != newCfg.Border,
 		Titlebar: old.Titlebar != newCfg.Titlebar,

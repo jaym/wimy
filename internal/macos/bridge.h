@@ -27,6 +27,7 @@ int wimy_screens(wimy_screen *out, int max);
 // runs on its own thread: goKeyDown is called there and decides whether
 // to swallow each key-down. 0 ok, -1 failed.
 int wimy_start_keytap(void);
+int wimy_start_gesturetap(void); // listen-only trackpad tap (swipes), main thread
 int wimy_secure_input_pid(void); // 0 when no app holds secure input
 // app_name writes pid's app name (UTF-8, NUL-terminated) to out.
 void wimy_app_name(int pid, char *out, int max);

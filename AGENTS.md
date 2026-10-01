@@ -239,6 +239,13 @@ go generate ./internal/proto
   `/usr/bin/jq` in the plugin. wimy's own login agent gets
   `/usr/bin:/bin:/usr/sbin:/sbin` only, so it adds the Homebrew and Nix
   profile folders to its PATH at start (`loginPath`).
+- Swipes come from a second, **listen-only** CGEventTap for
+  `NSEventTypeGesture` on the **main** run loop (`wimy_start_gesturetap`):
+  `[NSEvent touchesMatchingPhase:]` returns no touches when the event
+  is made on another thread (the key tap's), and a listen-only tap never
+  holds events up while the main thread is busy. `swipeDetector` fires
+  once per three-finger gesture past 0.06 trackpad widths (real swipes
+  measured 0.07-0.27).
 - Mod-p without a `launcher` (the macOS default) lists `.app` bundles in
   the `menu` program and runs `launch <name>` (`open -a`); the menu runs
   through `sh -c` with `-p <label>` appended as `"$@"`. Don't drive the

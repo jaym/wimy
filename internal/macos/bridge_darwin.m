@@ -479,6 +479,38 @@ int wimy_start_keytap(void) {
 	return 0;
 }
 
+static CFMachPortRef gesturetap;
+
+// gesturetap_cb feeds trackpad touches to the swipe detector. NSEvent
+// fills in an event's touches only on the main thread, so this tap
+// runs there; it only listens, so it never holds events up.
+static CGEventRef gesturetap_cb(CGEventTapProxy proxy, CGEventType type, CGEventRef ev, void *ctx) {
+	if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
+		CGEventTapEnable(gesturetap, true);
+		return ev;
+	}
+	@autoreleasepool {
+		NSEvent *e = [NSEvent eventWithCGEvent:ev];
+		if (e.type != NSEventTypeGesture) return ev;
+		NSSet<NSTouch *> *touches = [e touchesMatchingPhase:NSTouchPhaseTouching inView:nil];
+		double x = 0;
+		for (NSTouch *t in touches) x += t.normalizedPosition.x;
+		goTouch((int)touches.count, touches.count ? x / touches.count : 0);
+	}
+	return ev;
+}
+
+int wimy_start_gesturetap(void) {
+	gesturetap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap, kCGEventTapOptionListenOnly,
+	                              CGEventMaskBit((CGEventType)NSEventTypeGesture), gesturetap_cb, NULL);
+	if (!gesturetap) return -1;
+	CFRunLoopSourceRef src = CFMachPortCreateRunLoopSource(NULL, gesturetap, 0);
+	CFRunLoopAddSource(CFRunLoopGetMain(), src, kCFRunLoopCommonModes);
+	CFRelease(src);
+	CGEventTapEnable(gesturetap, true);
+	return 0;
+}
+
 // wimy_secure_input_pid returns the pid of the process holding secure
 // event input (which blinds the event tap), or 0.
 int wimy_secure_input_pid(void) {

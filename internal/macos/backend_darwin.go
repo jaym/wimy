@@ -45,6 +45,7 @@ type Backend struct {
 
 	hotkeys   []hotkey  // all bindings; index = Carbon hotkey id
 	tap       tapRouter // bindings the event tap delivers; read on the tap thread
+	gestureOn bool      // the trackpad (swipe) tap is installed
 	tapOn     bool      // the event tap is installed
 	securePID int       // process holding secure input, 0 if none
 	secureApp string    // its name while it blinds tap-delivered bindings
@@ -141,7 +142,7 @@ func (b *Backend) rebind() {
 		log.Printf("bind %q: no macOS key or modifier for this combo; ignored", combo)
 	}
 	b.hotkeys = keys
-	b.tap.set(keys)
+	b.tap.set(keys, b.Cfg.Swipes)
 	for id, k := range keys {
 		if k.viaTap() {
 			continue
@@ -155,6 +156,13 @@ func (b *Backend) rebind() {
 			log.Printf("could not install the keyboard event tap: bindings without Ctrl or Cmd won't work")
 		} else {
 			b.tapOn = true
+		}
+	}
+	if len(b.Cfg.Swipes) > 0 && !b.gestureOn {
+		if C.wimy_start_gesturetap() != 0 {
+			log.Printf("could not install the trackpad event tap: swipes won't work")
+		} else {
+			b.gestureOn = true
 		}
 	}
 }
@@ -1049,6 +1057,19 @@ func goHotKey(id C.uint32_t) {
 	defer b.guard()
 	if int(id) < len(b.hotkeys) {
 		b.Enqueue(b.hotkeys[id].cmd)
+		b.markDirty()
+	}
+}
+
+// goTouch runs on the main thread for every trackpad gesture event
+// (the gesture tap): fingers touching and their average x. A completed
+// swipe's command runs like a key binding's.
+//
+//export goTouch
+func goTouch(fingers C.int, x C.double) {
+	b := current
+	if cmd := b.tap.touch(int(fingers), float64(x)); cmd != "" {
+		b.Enqueue(cmd)
 		b.markDirty()
 	}
 }

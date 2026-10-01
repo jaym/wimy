@@ -382,6 +382,12 @@ Accessibility) for whatever starts it — for now the terminal you run
   actions. wimy adds the Homebrew (`/opt/homebrew/bin`,
   `/usr/local/bin`) and Nix profile folders to its `PATH`, which
   launchd leaves bare, so programs installed either way are found.
+- **Trackpad swipes** (opt-in): `swipe "left" { view-next; }` and
+  `swipe "right" { view-prev; }` run a command when three fingers swipe
+  sideways (fingers left shows the next view, like macOS Spaces). Move
+  macOS's own three-finger swipe to four fingers (System Settings →
+  Trackpad → More Gestures), or both act. The Nix module does both with
+  `programs.wimy.swipe.enable = true` (log out once).
 - **Views:** macOS has no way to hide one window of an app, so windows
   of views that aren't shown are parked in a corner of their screen
   (bottom-right, or bottom-left when another screen is to the right),

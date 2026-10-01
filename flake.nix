@@ -70,6 +70,7 @@
                   terminal "open -na Ghostty"
                 '';
                 programs.wimy.sketchybar.height = 30;
+                programs.wimy.swipe.enable = true;
                 programs.wimy.sketchybar.extraConfig = "sketchybar --set clock icon.color=$RED";
               }
             ];
@@ -84,10 +85,12 @@
           # matches the bar, the user's settings come after it
           hm-sketchybar =
             assert hmCheck.config.targets.darwin.defaults.NSGlobalDomain.NSConvolutionOverride1 == 1;
+            assert hmCheck.config.targets.darwin.defaults."com.apple.AppleMultitouchTrackpad".TrackpadThreeFingerHorizSwipeGesture == 0;
             pkgs.runCommand "wimy-hm-sketchybar-check" { } ''
             files=${hmCheck.config.home-files}
             set -x
             grep -qx 'bar-gap 30' $files/.config/wimy/config.kdl
+            grep -qx 'swipe "left" { view-next; }' $files/.config/wimy/config.kdl
             grep -q '^menu "/nix/store/.*-choose-gui-.*/bin/choose .*-f '"'"'MesloLGM Nerd Font'"'"'"$' $files/.config/wimy/config.kdl
             grep -qx 'terminal "open -na Ghostty"' $files/.config/wimy/config.kdl
             grep -qx 'BAR_HEIGHT=30' $files/.config/sketchybar/settings.sh

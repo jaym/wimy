@@ -841,17 +841,17 @@ func goScreensChanged() {
 }
 
 //export goWindowAdded
-func goWindowAdded(wid C.uint32_t, pid C.int, bundle, title, subrole *C.char, hasZoom, minimized C.int) {
+func goWindowAdded(wid C.uint32_t, pid C.int, bundle, title, subrole *C.char, zoom, resizable, minimized C.int) {
 	defer current.guard()
 	current.pids[wm.WindowID(wid)] = int(pid)
 	current.windowAdded(wm.WindowID(wid), C.GoString(bundle), C.GoString(title), C.GoString(subrole),
-		hasZoom != 0, minimized != 0)
+		zoomButton(zoom), resizable != 0, minimized != 0)
 }
 
 // windowAdded brings a window into the model: a new one, one that was
 // open at startup, or one back from being minimized (to the views it
 // was on). Minimized windows stay out until they are restored.
-func (b *Backend) windowAdded(id wm.WindowID, bundle, title, subrole string, hasZoom, minimized bool) {
+func (b *Backend) windowAdded(id wm.WindowID, bundle, title, subrole string, zoom zoomButton, resizable, minimized bool) {
 	if minimized || b.known[id] {
 		return
 	}
@@ -894,7 +894,7 @@ func (b *Backend) windowAdded(id wm.WindowID, bundle, title, subrole string, has
 			tags = []string{v}
 		}
 	}
-	floating := ShouldFloat(subrole, hasZoom)
+	floating := ShouldFloat(subrole, zoom, resizable)
 	b.State.AddWindow(id, floating, tags...)
 	b.State.SetAppID(id, bundle)
 	b.State.SetTitle(id, title)

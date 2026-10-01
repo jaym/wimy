@@ -24,12 +24,32 @@ func toModel(f Frame, primaryH float64) wm.Rect {
 	}
 }
 
+// zoomButton is the state of a window's zoom (green) button.
+type zoomButton int
+
+const (
+	zoomNone     zoomButton = iota // no titlebar buttons: a frameless window
+	zoomDisabled                   // fixed-size windows (Calculator, preference panes)
+	zoomEnabled
+)
+
 // ShouldFloat reports whether a new window floats instead of tiling:
 // anything that isn't a standard window (dialogs, sheets, panels), and
-// standard windows without a zoom button (fixed-size windows such as
-// preference panes), the same heuristic AeroSpace uses.
-func ShouldFloat(subrole string, hasZoom bool) bool {
-	return subrole != "AXStandardWindow" || !hasZoom
+// standard windows whose zoom button is disabled (fixed-size windows),
+// the same heuristic AeroSpace uses. A frameless window (Ghostty with
+// window-decoration = none) has no zoom button at all; it tiles if its
+// size can be set.
+func ShouldFloat(subrole string, zoom zoomButton, resizable bool) bool {
+	if subrole != "AXStandardWindow" {
+		return true
+	}
+	switch zoom {
+	case zoomEnabled:
+		return false
+	case zoomNone:
+		return !resizable
+	}
+	return true
 }
 
 // maxFrameRetries is how often apply re-sends a frame an app didn't

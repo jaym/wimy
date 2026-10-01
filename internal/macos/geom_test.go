@@ -36,19 +36,26 @@ func TestToModelRounds(t *testing.T) {
 
 func TestShouldFloat(t *testing.T) {
 	cases := []struct {
-		subrole string
-		zoom    bool
-		want    bool
+		name      string
+		subrole   string
+		zoom      zoomButton
+		resizable bool
+		want      bool
 	}{
-		{"AXStandardWindow", true, false},
-		{"AXStandardWindow", false, true}, // fixed-size window (e.g. a preferences pane)
-		{"AXDialog", true, true},
-		{"AXFloatingWindow", false, true},
-		{"", true, true},
+		{"normal window", "AXStandardWindow", zoomEnabled, true, false},
+		{"fixed size (Calculator, preference panes)", "AXStandardWindow", zoomDisabled, false, true},
+		{"disabled zoom but resizable", "AXStandardWindow", zoomDisabled, true, true},
+		// frameless (Ghostty with window-decoration = none): no titlebar
+		// buttons at all, but a size that can be set
+		{"frameless, resizable", "AXStandardWindow", zoomNone, true, false},
+		{"frameless, fixed size", "AXStandardWindow", zoomNone, false, true},
+		{"dialog", "AXDialog", zoomEnabled, true, true},
+		{"floating panel", "AXFloatingWindow", zoomNone, true, true},
+		{"no subrole", "", zoomEnabled, true, true},
 	}
 	for _, c := range cases {
-		if got := ShouldFloat(c.subrole, c.zoom); got != c.want {
-			t.Errorf("ShouldFloat(%q, %v) = %v, want %v", c.subrole, c.zoom, got, c.want)
+		if got := ShouldFloat(c.subrole, c.zoom, c.resizable); got != c.want {
+			t.Errorf("%s: ShouldFloat(%q, %v, %v) = %v, want %v", c.name, c.subrole, c.zoom, c.resizable, got, c.want)
 		}
 	}
 }

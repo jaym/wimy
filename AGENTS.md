@@ -281,7 +281,10 @@ go generate ./internal/proto
 - Some apps return `kAXErrorFailure` from `AXUIElementSetAttributeValue`
   for a frame they did apply; judge by reading the frame back.
 - The float heuristic needs the zoom button *enabled* (Calculator has a
-  disabled one).
+  disabled one) — except frameless windows (Ghostty with
+  `window-decoration = none`), which have no titlebar buttons at all:
+  they tile when their size is settable. Having no close button either,
+  they are closed by making them main and posting Cmd-W to the app.
 - A process started from a terminal is attributed to that terminal by
   TCC: the terminal needs the Accessibility permission for bare-binary
   runs.

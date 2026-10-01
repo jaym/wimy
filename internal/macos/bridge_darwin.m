@@ -78,16 +78,22 @@ static int bool_attr(AXUIElementRef el, CFStringRef attr) {
 	return out;
 }
 
-// zoom_enabled reports whether the window has an enabled zoom button.
-// Fixed-size windows (Calculator, preference panes) have one, but
-// disabled.
-static int zoom_enabled(AXUIElementRef win) {
+// zoom_state reports the window's zoom button: 0 none (a frameless
+// window), 1 disabled (fixed-size windows: Calculator, preference
+// panes), 2 enabled — Go's zoomButton.
+static int zoom_state(AXUIElementRef win) {
 	CFTypeRef btn = NULL;
-	int ok = 0;
+	int state = 0;
 	if (AXUIElementCopyAttributeValue(win, kAXZoomButtonAttribute, &btn) == kAXErrorSuccess && btn)
-		ok = bool_attr((AXUIElementRef)btn, kAXEnabledAttribute);
+		state = bool_attr((AXUIElementRef)btn, kAXEnabledAttribute) ? 2 : 1;
 	if (btn) CFRelease(btn);
-	return ok;
+	return state;
+}
+
+// size_settable reports whether the window's size can be set.
+static int size_settable(AXUIElementRef win) {
+	Boolean ok = false;
+	return AXUIElementIsAttributeSettable(win, kAXSizeAttribute, &ok) == kAXErrorSuccess && ok;
 }
 
 static const char *bundle_of(pid_t pid) {
@@ -101,8 +107,8 @@ static void report_window(int i, int minimized) {
 	AXUIElementRef win = wins[i].el;
 	char *title = copy_str(win, kAXTitleAttribute);
 	char *subrole = copy_str(win, kAXSubroleAttribute);
-	goWindowAdded(wins[i].wid, wins[i].pid, (char *)bundle_of(wins[i].pid), title, subrole, zoom_enabled(win),
-	              minimized || bool_attr(win, kAXMinimizedAttribute));
+	goWindowAdded(wins[i].wid, wins[i].pid, (char *)bundle_of(wins[i].pid), title, subrole, zoom_state(win),
+	              size_settable(win), minimized || bool_attr(win, kAXMinimizedAttribute));
 	free(title);
 	free(subrole);
 }
@@ -613,14 +619,32 @@ int wimy_focus_none(void) {
 	}
 }
 
+// post_key sends one key press (down and up) with exactly the given
+// modifiers to app pid; the app handles it in its key window.
+static void post_key(pid_t pid, CGKeyCode key, CGEventFlags flags) {
+	for (int down = 1; down >= 0; down--) {
+		CGEventRef ev = CGEventCreateKeyboardEvent(NULL, key, down);
+		if (!ev) return;
+		CGEventSetFlags(ev, flags); // not the Option/Shift still held from the binding
+		CGEventPostToPid(pid, ev);
+		CFRelease(ev);
+	}
+}
+
+// wimy_window_close presses the window's close button. A frameless
+// window (Ghostty with window-decoration = none) has none: make it its
+// app's main window and send the app Cmd-W, the standard close key.
 void wimy_window_close(uint32_t wid) {
 	int i = find_win(wid);
 	if (i < 0) return;
 	CFTypeRef btn = NULL;
 	if (AXUIElementCopyAttributeValue(wins[i].el, kAXCloseButtonAttribute, &btn) == kAXErrorSuccess && btn) {
 		AXUIElementPerformAction((AXUIElementRef)btn, kAXPressAction);
+		CFRelease(btn);
+		return;
 	}
-	if (btn) CFRelease(btn);
+	AXUIElementSetAttributeValue(wins[i].el, kAXMainAttribute, kCFBooleanTrue);
+	post_key(wins[i].pid, 13 /* kVK_ANSI_W */, kCGEventFlagMaskCommand);
 }
 
 // --- decorations ---

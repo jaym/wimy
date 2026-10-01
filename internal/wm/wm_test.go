@@ -750,3 +750,63 @@ func TestFullscreenUsesUsableArea(t *testing.T) {
 		t.Errorf("fullscreen rect = %+v, want the usable area (bars stay visible)", p.Rect)
 	}
 }
+
+func TestReplaceWindowKeepsPlace(t *testing.T) {
+	s := newTestState(t) // window 1 on view "1"
+	s.AddWindow(2, false)
+	s.MoveDir(DirRight) // 1 | 2
+	s.AddWindow(3, false)
+	s.TagSpec("+web")
+	s.FocusWindow(2)
+	before := columnsOf(s)
+
+	// window 2 becomes a background tab; 9 is its now-visible sibling
+	s.ReplaceWindow(2, 9)
+
+	after := columnsOf(s)
+	want := [][]WindowID{before[0], {9, 3}}
+	if !reflect.DeepEqual(after, want) {
+		t.Fatalf("columns = %v, want %v (9 in 2's place)", after, want)
+	}
+	if s.Windows[2] != nil || s.Windows[9] == nil {
+		t.Fatalf("window 2 still known or 9 missing")
+	}
+	if s.Focused != 9 {
+		t.Errorf("focus = %d, want 9 (it replaced the focused window)", s.Focused)
+	}
+	if got := s.Windows[9].TagList(); !reflect.DeepEqual(got, s.Windows[3].TagList()) && !reflect.DeepEqual(got, []string{"1"}) {
+		t.Errorf("tags of 9 = %v", got)
+	}
+}
+
+func TestReplaceWindowFloating(t *testing.T) {
+	s := newTestState(t)
+	s.AddWindow(5, true)
+	s.SetFloatRect(5, Rect{X: 10, Y: 20, W: 300, H: 200})
+	s.ReplaceWindow(5, 6)
+	v := s.activeView()
+	if !v.FloatContains(6) || v.FloatContains(5) {
+		t.Errorf("floating membership not transferred: %v", v.Float)
+	}
+	if s.FloatRectOf(6) != (Rect{X: 10, Y: 20, W: 300, H: 200}) {
+		t.Errorf("float rect not transferred: %+v", s.FloatRectOf(6))
+	}
+}
+
+func TestReplaceWindowOnOtherViews(t *testing.T) {
+	s := newTestState(t)
+	s.AddWindow(2, false, "web") // only on the hidden view "web"
+	s.ReplaceWindow(2, 7)
+	if v := s.View("web"); v == nil || !v.contains(7) || v.contains(2) {
+		t.Errorf("replacement not on view web")
+	}
+}
+
+func TestReplaceWindowUnknownOrSameIsNoop(t *testing.T) {
+	s := newTestState(t)
+	s.ReplaceWindow(42, 43)
+	s.ReplaceWindow(1, 1)
+	if s.Windows[1] == nil || s.Windows[43] != nil {
+		t.Errorf("no-op replace changed the model")
+	}
+}

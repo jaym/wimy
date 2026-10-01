@@ -423,6 +423,41 @@ func ResizeColumns(c, n *Column, shift float64) {
 	n.Factor -= shift
 }
 
+// ReplaceWindow puts window nu in old's place everywhere — its tags,
+// column position or floating slot and rect, focus, fullscreen — and
+// forgets old. Backends use it when a window is swapped for another
+// that stands for the same thing on screen (macOS tabs: the visible tab
+// of a tab group changes). A no-op unless old exists and nu is new.
+func (s *State) ReplaceWindow(old, nu WindowID) {
+	w := s.Windows[old]
+	if w == nil || old == nu || s.Windows[nu] != nil {
+		return
+	}
+	repl := func(ids []WindowID) {
+		for i, id := range ids {
+			if id == old {
+				ids[i] = nu
+			}
+		}
+	}
+	for _, v := range s.Views {
+		for _, c := range v.Columns {
+			repl(c.Windows)
+		}
+		repl(v.Float)
+		if v.Fullscreen == old {
+			v.Fullscreen = nu
+		}
+	}
+	nw := *w
+	nw.ID = nu
+	delete(s.Windows, old)
+	s.Windows[nu] = &nw
+	if s.Focused == old {
+		s.Focused = nu
+	}
+}
+
 // ToggleFullscreen makes the focused window the active view's
 // fullscreen window, or ends fullscreen if it already is.
 func (s *State) ToggleFullscreen() {

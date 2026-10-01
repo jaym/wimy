@@ -28,6 +28,8 @@ int wimy_screens(wimy_screen *out, int max);
 // to swallow each key-down. 0 ok, -1 failed.
 int wimy_start_keytap(void);
 int wimy_secure_input_pid(void); // 0 when no app holds secure input
+// app_name writes pid's app name (UTF-8, NUL-terminated) to out.
+void wimy_app_name(int pid, char *out, int max);
 
 // Carbon hotkeys: goHotKey(id) is called on each press. Returns 0 or
 // the OSStatus (e.g. eventHotKeyExistsErr when another app owns it).
@@ -37,6 +39,10 @@ void wimy_hotkeys_clear(void);
 int wimy_window_frame(uint32_t wid, wimy_rect *out); // AX coordinates (top-left origin)
 int wimy_window_set_position(uint32_t wid, double x, double y); // 0 or the AXError
 uint32_t wimy_focused_window(void); // frontmost app's focused tracked window, or 0
+// The windows app pid lists right now (only the visible tab of each tab
+// group): their CGWindowIDs, up to max. Returns how many.
+int wimy_app_windows(int pid, uint32_t *out, int max);
+void wimy_report_window(uint32_t wid); // goWindowAdded for a tracked window
 void wimy_start_secure_input_poll(void); // goSecureInputTick every 2s
 int wimy_focus_none(void); // activate Finder (keys go nowhere); returns its pid or 0
 

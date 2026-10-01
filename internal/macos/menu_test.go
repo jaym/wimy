@@ -96,3 +96,20 @@ func TestRunsBeforeStart(t *testing.T) {
 		}
 	}
 }
+
+func TestMenuForSecureInput(t *testing.T) {
+	title, items := menuFor(menuState(), menuStatus{Trusted: true, Login: loginEnabled, SecureApp: "Terminal"})
+	if title != "⚠ 1" {
+		t.Errorf("title = %q, want the view with a warning", title)
+	}
+	got := strings.Join(labels(items), " | ")
+	if !strings.Contains(got, "Option keys blocked by Terminal") {
+		t.Errorf("menu %q doesn't name the app holding secure input", got)
+	}
+	if items[0].Enabled || items[0].Cmd != "" {
+		t.Errorf("the notice should come first and be informational: %+v", items[0])
+	}
+	if title, _ := menuFor(menuState(), menuStatus{Trusted: true}); title != "1" {
+		t.Errorf("no secure input: title %q", title)
+	}
+}

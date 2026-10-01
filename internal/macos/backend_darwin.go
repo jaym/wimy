@@ -47,6 +47,7 @@ type Backend struct {
 	tap       tapRouter // bindings the event tap delivers; read on the tap thread
 	tapOn     bool      // the event tap is installed
 	securePID int       // process holding secure input, 0 if none
+	secureApp string    // its name while it blinds tap-delivered bindings
 	applied   *frames
 	known     map[wm.WindowID]bool // windows in the model
 	outputs   []outputSpec         // screens, in NSScreen order
@@ -71,6 +72,11 @@ type Backend struct {
 	boot      int64 // boot time, tags the store (window IDs restart after a reboot)
 
 	pids map[wm.WindowID]int // owning app of each window in the model
+
+	// macOS tabs: the background tabs wimy set aside (see tabs.go), and a
+	// guard against re-entering the tab check from its own callbacks
+	tabbed      map[wm.WindowID]bool
+	reconciling bool
 
 	// decorations: titlebar renderers by height (titlebar, or stack
 	// strip when titlebars are off) and each window's current image
@@ -108,6 +114,7 @@ func New(cfg *config.Config, configArg string, notify func()) *Backend {
 		lastShown: make(map[wm.WindowID]wm.Rect),
 		away:      make(map[wm.WindowID][]string),
 		pids:      make(map[wm.WindowID]int),
+		tabbed:    make(map[wm.WindowID]bool),
 		renderers: make(map[int32]*titlebar.Renderer),
 		decoKeys:  decoCache{},
 		notify:    notify,
@@ -154,15 +161,20 @@ func (b *Backend) checkSecureInput() {
 		return
 	}
 	b.securePID = pid
+	b.secureApp = ""
 	if !b.tap.active() {
 		return
 	}
 	if pid != 0 {
-		log.Printf("secure input is on (pid %d, e.g. Terminal's Secure Keyboard Entry or a password field): "+
-			"bindings without Ctrl or Cmd are blocked until it ends", pid)
+		var name [256]C.char
+		C.wimy_app_name(C.int(pid), &name[0], C.int(len(name)))
+		b.secureApp = C.GoString(&name[0])
+		log.Printf("secure input is on (%s, pid %d: a password prompt or Secure Keyboard Entry): "+
+			"bindings without Ctrl or Cmd are blocked until it ends", b.secureApp, pid)
 	} else {
 		log.Printf("secure input is off: all bindings work again")
 	}
+	b.updateMenu()
 }
 
 // Run checks the Accessibility permission, starts tracking windows and
@@ -297,7 +309,8 @@ func (b *Backend) updateMenu() {
 		return
 	}
 	cfgPath := b.ConfigPath()
-	title, items := menuFor(b.State, menuStatus{Trusted: b.started, Login: b.login, ConfigPath: cfgPath})
+	title, items := menuFor(b.State, menuStatus{Trusted: b.started, Login: b.login, ConfigPath: cfgPath,
+		SecureApp: b.secureApp})
 	if b.menuShown && title == b.menuTitle && slices.Equal(items, b.menu) {
 		return
 	}
@@ -833,6 +846,14 @@ func (b *Backend) windowAdded(id wm.WindowID, bundle, title, subrole string, has
 	if minimized || b.known[id] {
 		return
 	}
+	if !b.startup && b.reconcileTabs(b.pids[id], id, 0) {
+		// a new or re-shown tab took its tab group's tile
+		b.State.SetAppID(id, bundle)
+		b.State.SetTitle(id, title)
+		b.markDirty()
+		return
+	}
+	delete(b.tabbed, id)
 	b.known[id] = true
 	if b.State.Windows[id] != nil {
 		// taken over from the wimy this one replaced: keep its place
@@ -907,9 +928,15 @@ func (b *Backend) dropWindow(id wm.WindowID, exists bool) {
 
 //export goWindowRemoved
 func goWindowRemoved(wid C.uint32_t) {
-	defer current.guard()
-	current.dropWindow(wm.WindowID(wid), false)
-	delete(current.pids, wm.WindowID(wid))
+	b, id := current, wm.WindowID(wid)
+	defer b.guard()
+	// a closed tab: its now-visible sibling takes the tile
+	if b.known[id] {
+		b.reconcileTabs(b.pids[id], 0, id)
+	}
+	b.dropWindow(id, false)
+	delete(b.tabbed, id)
+	delete(b.pids, id)
 }
 
 // goWindowGone: the window still exists but leaves the tiling
@@ -930,6 +957,7 @@ func goWindowGone(wid C.uint32_t) {
 func goFocusChanged(wid C.uint32_t, pid C.int) {
 	b, id := current, wm.WindowID(wid)
 	defer b.guard()
+	b.reconcileTabs(int(pid), 0, 0) // switching tabs focuses the shown tab
 	if !b.known[id] {
 		return
 	}
@@ -1030,3 +1058,80 @@ func goKeyDown(code C.uint16_t, flags C.uint64_t, repeat C.int) C.int {
 
 // timeNow is time.Now, a variable so the handoff clock is explicit.
 var timeNow = time.Now
+
+// reconcileTabs keeps one tile per macOS tab group for app pid (see
+// tabs.go): a window that joined the app's window list takes the place
+// of one that left it, a lone leaver is set aside as a background tab,
+// a lone background tab coming back is added again. adding is a window
+// being added right now; closed one being removed (it isn't set aside).
+// It reports whether adding took a place.
+func (b *Backend) reconcileTabs(pid int, adding, closed wm.WindowID) bool {
+	if pid <= 0 || b.reconciling {
+		return false
+	}
+	b.reconciling = true
+	defer func() { b.reconciling = false }()
+
+	var buf [256]C.uint32_t
+	n := int(C.wimy_app_windows(C.int(pid), &buf[0], C.int(len(buf))))
+	if n == 0 {
+		return false // app not answering (or quitting): don't guess
+	}
+	listed := make([]wm.WindowID, n)
+	for i := range listed {
+		listed[i] = wm.WindowID(buf[i])
+	}
+	var tiled, tabbed []wm.WindowID
+	for id, p := range b.pids {
+		if p != pid {
+			continue
+		}
+		if b.known[id] {
+			tiled = append(tiled, id)
+		} else if b.tabbed[id] {
+			tabbed = append(tabbed, id)
+		}
+	}
+	pairs, hide, show := tabChanges(tiled, listed, tabbed, adding)
+	took := false
+	for _, pr := range pairs {
+		b.replaceTab(pr[0], pr[1])
+		took = took || pr[1] == adding
+	}
+	for _, id := range hide {
+		if id != closed {
+			b.dropWindow(id, true) // remembers its views in away
+			b.tabbed[id] = true
+		}
+	}
+	for _, id := range show {
+		if id != adding {
+			delete(b.tabbed, id)
+			C.wimy_report_window(C.uint32_t(id)) // re-added with its views
+		}
+	}
+	if len(pairs)+len(hide)+len(show) > 0 {
+		b.markDirty()
+	}
+	return took
+}
+
+// replaceTab puts window nu (the now-visible tab) in old's tile.
+func (b *Backend) replaceTab(old, nu wm.WindowID) {
+	b.State.ReplaceWindow(old, nu)
+	delete(b.known, old)
+	b.known[nu] = true
+	delete(b.tabbed, nu)
+	b.tabbed[old] = true
+	if r, ok := b.lastShown[old]; ok {
+		b.lastShown[nu] = r
+	}
+	delete(b.lastShown, old)
+	b.applied.forget(old)
+	b.applied.forget(nu)
+	C.wimy_deco_destroy(C.uint32_t(old))
+	delete(b.decoKeys, old)
+	if b.lastFocus == old {
+		b.lastFocus = nu
+	}
+}

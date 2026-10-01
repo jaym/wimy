@@ -172,6 +172,14 @@ static void observer_cb(AXObserverRef obs, AXUIElementRef el, CFStringRef note, 
 		track_window(pid, el);
 	} else if (CFEqual(note, kAXFocusedWindowChangedNotification)) {
 		int i = find_el(el);
+		if (i < 0) {
+			// a background tab from before wimy started, shown for the
+			// first time: track it (the backend pairs it with its tab)
+			pid_t pid = 0;
+			AXUIElementGetPid(el, &pid);
+			track_window(pid, el);
+			i = find_el(el);
+		}
 		if (i >= 0) goFocusChanged(wins[i].wid, wins[i].pid);
 	} else if (CFEqual(note, kAXWindowMiniaturizedNotification)) {
 		int i = find_el(el);
@@ -333,6 +341,36 @@ static uint32_t focused_wid(pid_t pid) {
 	if (win) CFRelease(win);
 	CFRelease(app);
 	return (wid && find_win(wid) >= 0) ? wid : 0;
+}
+
+int wimy_app_windows(int pid, uint32_t *out, int max) {
+	AXUIElementRef app = AXUIElementCreateApplication(pid);
+	AXUIElementSetMessagingTimeout(app, 1.0);
+	CFArrayRef list = NULL;
+	int n = 0;
+	if (AXUIElementCopyAttributeValue(app, kAXWindowsAttribute, (CFTypeRef *)&list) == kAXErrorSuccess && list) {
+		for (CFIndex i = 0; i < CFArrayGetCount(list) && n < max; i++) {
+			CGWindowID wid = 0;
+			if (_AXUIElementGetWindow((AXUIElementRef)CFArrayGetValueAtIndex(list, i), &wid) == kAXErrorSuccess && wid)
+				out[n++] = wid;
+		}
+		CFRelease(list);
+	}
+	CFRelease(app);
+	return n;
+}
+
+void wimy_app_name(int pid, char *out, int max) {
+	@autoreleasepool {
+		NSRunningApplication *app = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
+		NSString *name = app.localizedName ?: app.executableURL.lastPathComponent ?: [NSString stringWithFormat:@"pid %d", pid];
+		strlcpy(out, name.UTF8String ?: "", max);
+	}
+}
+
+void wimy_report_window(uint32_t wid) {
+	int i = find_win(wid);
+	if (i >= 0) report_window(i, 0);
 }
 
 uint32_t wimy_focused_window(void) {

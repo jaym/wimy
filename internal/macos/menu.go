@@ -34,6 +34,9 @@ type menuStatus struct {
 	Trusted    bool // Accessibility permission granted
 	Login      int  // loginOff, loginEnabled, ...
 	ConfigPath string
+	// SecureApp names the app holding secure input while it blinds the
+	// key tap (bindings without Ctrl or Cmd); "" otherwise.
+	SecureApp string
 }
 
 // menuFor builds the menu bar item: its title (the focused output's
@@ -56,6 +59,14 @@ func menuFor(s *wm.State, st menuStatus) (string, []menuItem) {
 		title = shown
 	}
 	var items []menuItem
+	if st.SecureApp != "" {
+		title = "⚠ " + title
+		items = append(items,
+			menuItem{Label: "Option keys blocked by " + st.SecureApp},
+			menuItem{Label: "(secure input: a password prompt, or Secure Keyboard Entry)"},
+			menuItem{Sep: true},
+		)
+	}
 	names := make([]string, 0, len(s.Views))
 	for _, v := range s.Views {
 		names = append(names, v.Name)

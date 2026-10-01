@@ -69,8 +69,8 @@ void wimy_status_remove(void);
 // Start at login via SMAppService (Contents/Library/LaunchAgents/
 // io.github.jaym.wimy.plist). Returns -1 when not running from
 // Wimy.app, else 0 off, 1 on, 2 needs approval.
-int wimy_login_set(int on);
-int wimy_login_status(void); // like wimy_login_set, without changing anything
+int wimy_in_app_bundle(void);           // running from Wimy.app
+int wimy_login_legacy_unregister(void);  // drop an SMAppService login item: 1 done, 0 none, -1 failed
 void wimy_open_accessibility_settings(void);
 void wimy_start_trust_poll(void); // goTrustTick every second
 // Returns 0 on success; the AXError of the position and final size

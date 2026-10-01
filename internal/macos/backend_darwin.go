@@ -84,14 +84,13 @@ type Backend struct {
 	decoKeys  decoCache
 
 	// menu bar item and startup state
-	started          bool       // start() ran (Accessibility granted)
-	storeOK          bool       // the hidden store was loaded: saving it is safe
-	unregisterAtExit bool       // start-at-login turned off while running as the login agent
-	restarted        bool       // took over a restart handoff
-	login            int        // start-at-login status (loginOff, ...)
-	menuTitle        string     // what the status item shows, to skip no-op updates
-	menu             []menuItem // current menu; goMenuItem indexes it
-	menuShown        bool
+	started   bool       // start() ran (Accessibility granted)
+	storeOK   bool       // the hidden store was loaded: saving it is safe
+	restarted bool       // took over a restart handoff
+	login     int        // start-at-login status (loginOff, ...)
+	menuTitle string     // what the status item shows, to skip no-op updates
+	menu      []menuItem // current menu; goMenuItem indexes it
+	menuShown bool
 
 	// away remembers the views (tags) of minimized windows, so a
 	// restored window returns to them instead of the focused view.
@@ -204,9 +203,6 @@ func (b *Backend) Run(ctx context.Context) error {
 	C.wimy_app_run()
 	// Quit, Shutdown (SIGINT/SIGTERM): never leave windows parked
 	b.unhideAll()
-	if b.unregisterAtExit {
-		C.wimy_login_set(0) // kills the agent job: that is this exiting process
-	}
 	return nil
 }
 
@@ -279,22 +275,35 @@ func (b *Backend) start() {
 	b.markDirty()
 }
 
-// applyLogin registers or unregisters the login item per start-at-login
-// (only when running from Wimy.app).
+// applyLogin installs or removes the login agent per start-at-login
+// (only when running from Wimy.app), and removes the SMAppService login
+// item older wimys registered (see login.go).
 func (b *Backend) applyLogin() {
-	b.unregisterAtExit = false
-	switch loginAction(b.Cfg.StartAtLogin, os.Getenv("XPC_SERVICE_NAME") == "io.github.jaym.wimy") {
-	case loginRegister:
-		b.login = int(C.wimy_login_set(1))
-	case loginUnregister:
-		b.login = int(C.wimy_login_set(0))
-	case loginUnregisterAtExit:
-		b.unregisterAtExit = true
-		b.login = int(C.wimy_login_status())
-		log.Printf("start at login turned off: wimy leaves Login Items when it quits")
+	if C.wimy_in_app_bundle() == 0 {
+		b.login = loginNoBundle
+		return
 	}
-	if b.login == loginApproval {
-		log.Printf("start at login: approve Wimy in System Settings → General → Login Items")
+	if os.Getenv("XPC_SERVICE_NAME") != "io.github.jaym.wimy" {
+		// unregistering unloads that job: never when it is this process
+		switch C.wimy_login_legacy_unregister() {
+		case 1:
+			log.Printf("start at login: removed the old Login Items entry (now a launchd agent)")
+		case -1:
+			log.Printf("start at login: could not remove the old Login Items entry; remove Wimy in System Settings → General → Login Items")
+		}
+	}
+	exe, err := os.Executable()
+	if err == nil {
+		exe, err = filepath.EvalSymlinks(exe)
+	}
+	if err != nil {
+		log.Printf("start at login: %v", err)
+		return
+	}
+	home, _ := os.UserHomeDir()
+	b.login, err = setLoginAgent(filepath.Join(home, "Library", "LaunchAgents"), exe, b.Cfg.StartAtLogin)
+	if err != nil {
+		log.Printf("start at login: %v", err)
 	}
 }
 

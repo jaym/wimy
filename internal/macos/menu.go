@@ -7,14 +7,6 @@ import (
 	"wimy/internal/wm"
 )
 
-// Start-at-login states (SMAppService status as the bridge reports it).
-const (
-	loginNoBundle = -1 // not running from Wimy.app: nothing to register
-	loginOff      = 0
-	loginEnabled  = 1
-	loginApproval = 2 // registered, waiting for approval in Login Items
-)
-
 // cmdOpenAccessibility is a menu action handled by the backend itself
 // (it isn't a window manager command): open the Accessibility pane.
 const cmdOpenAccessibility = "!open-accessibility"
@@ -97,8 +89,6 @@ func loginLabel(status int) string {
 	switch status {
 	case loginEnabled:
 		return "Start at login: on"
-	case loginApproval:
-		return "Start at login: needs approval in Login Items"
 	case loginNoBundle:
 		return "Start at login: only from Wimy.app"
 	}

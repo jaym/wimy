@@ -246,6 +246,13 @@ go generate ./internal/proto
   `kAXMainWindowChangedNotification` (window and tab switches alike):
   the bridge observes both. A focused window may be untracked (a
   background tab from before a restart): track it, don't drop it.
+- Start at login is a plain `~/Library/LaunchAgents` agent wimy writes
+  (`login.go`), not an SMAppService login item: those get launch
+  constraints, and a self-signed build fails them at login (`Launch
+  Constraint Violation`, OS_REASON_CODESIGNING in `log show`), so wimy
+  silently never started after a reboot. Its label
+  (`io.github.jaym.wimy.login`) differs from the old SMAppService one,
+  which wimy unregisters on start — unregistering unloads that label.
 - App hiding is undone on purpose (`unhide_app`); minimized windows keep
   their tags (`away`) so they come back to their views.
 

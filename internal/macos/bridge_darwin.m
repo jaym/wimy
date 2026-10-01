@@ -802,32 +802,19 @@ void wimy_status_remove(void) {
 	}
 }
 
-int wimy_login_set(int on) {
-	@autoreleasepool {
-		if (![[NSBundle mainBundle].bundleIdentifier isEqualToString:@"io.github.jaym.wimy"]) return -1;
-		SMAppService *svc = [SMAppService agentServiceWithPlistName:@"io.github.jaym.wimy.plist"];
-		NSError *err = nil;
-		if (on && svc.status != SMAppServiceStatusEnabled && svc.status != SMAppServiceStatusRequiresApproval) {
-			if (![svc registerAndReturnError:&err]) NSLog(@"wimy: start at login: %@", err);
-		} else if (!on && svc.status != SMAppServiceStatusNotRegistered) {
-			if (![svc unregisterAndReturnError:&err]) NSLog(@"wimy: start at login: %@", err);
-		}
-		switch (svc.status) {
-		case SMAppServiceStatusEnabled: return 1;
-		case SMAppServiceStatusRequiresApproval: return 2;
-		default: return 0;
-		}
-	}
+int wimy_in_app_bundle(void) {
+	return [[NSBundle mainBundle].bundleIdentifier isEqualToString:@"io.github.jaym.wimy"];
 }
 
-int wimy_login_status(void) {
+// Older wimys registered their login item through SMAppService, which
+// a self-signed build can't launch at login (launch constraints): drop
+// that registration (start at login is a plain launchd agent now).
+// Returns 1 if it removed one, 0 if there was none, -1 on failure.
+int wimy_login_legacy_unregister(void) {
 	@autoreleasepool {
-		if (![[NSBundle mainBundle].bundleIdentifier isEqualToString:@"io.github.jaym.wimy"]) return -1;
-		switch ([SMAppService agentServiceWithPlistName:@"io.github.jaym.wimy.plist"].status) {
-		case SMAppServiceStatusEnabled: return 1;
-		case SMAppServiceStatusRequiresApproval: return 2;
-		default: return 0;
-		}
+		SMAppService *svc = [SMAppService agentServiceWithPlistName:@"io.github.jaym.wimy.plist"];
+		if (svc.status == SMAppServiceStatusNotRegistered || svc.status == SMAppServiceStatusNotFound) return 0;
+		return [svc unregisterAndReturnError:NULL] ? 1 : -1;
 	}
 }
 

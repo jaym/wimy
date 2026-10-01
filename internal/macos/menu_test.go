@@ -60,7 +60,6 @@ func TestMenuForLoginStates(t *testing.T) {
 	for status, want := range map[int]string{
 		loginEnabled:  "Start at login: on",
 		loginOff:      "Start at login: off",
-		loginApproval: "Start at login: needs approval in Login Items",
 		loginNoBundle: "Start at login: only from Wimy.app",
 	} {
 		_, items := menuFor(menuState(), menuStatus{Trusted: true, Login: status})

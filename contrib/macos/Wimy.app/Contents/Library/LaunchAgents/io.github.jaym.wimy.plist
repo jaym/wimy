@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- Login agent, registered by wimy itself through SMAppService when
-     start-at-login is on. KeepAlive restarts wimy after a crash but not
-     after `wimyctl quit` (a successful exit). -->
+<!-- The SMAppService login agent older wimys registered. A self-signed
+     build fails its launch constraints at login, so wimy now writes a
+     plain ~/Library/LaunchAgents agent instead (internal/macos/login.go)
+     and only keeps this file so it can unregister the old item. -->
 <plist version="1.0">
 <dict>
 	<key>Label</key>

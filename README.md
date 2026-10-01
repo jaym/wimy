@@ -349,8 +349,9 @@ tags, columns, floating windows and parked windows all carry over
 runs). Signing with the same identity every time keeps the Accessibility
 permission across updates — with ad-hoc signing macOS forgets it for
 every changed build. Wimy lives in the menu bar (view name; views,
-reload, restart, quit) and registers itself as a login item
-(`start-at-login false` to turn that off; `status-item false` hides the
+reload, restart, quit) and starts at login through a launchd agent it
+writes to `~/Library/LaunchAgents/io.github.jaym.wimy.login.plist`
+(`start-at-login false` removes it; `status-item false` hides the
 menu bar item). It logs to `~/Library/Logs/wimy.log`.
  It tiles every
 screen, switches views, follows focus changes you make with the mouse

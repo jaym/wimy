@@ -161,7 +161,7 @@ wimyctl subscribe | jq -r '.params.views | map(select(.output != "")) | .[].name
 `view [tag]`, `view-next`, `view-prev`, `view-n <n>`,
 `moveto [tag]`, `moveto-n <n>`, `tag <[+-]name...>`,
 `kill`, `spawn <cmd...>`, `spawn-terminal`, `spawn-menu`,
-`action [name]`, `reload`, `quit`.
+`action [name]`, `launch <app>` (macOS), `reload`, `quit`.
 
 ## Configuration
 
@@ -170,7 +170,8 @@ in this repo. Inside single-line blocks, end the command with `;`:
 `bind "Mod-h" { focus "left"; }`.
 
 `launcher` is the Mod-p program launcher, `menu` the dmenu-style
-prompter used for tag/action prompts.
+prompter used for tag/action prompts. Both run through `sh -c`, so they
+may quote arguments; prompts append `-p <label>` to `menu`.
 
 Binding notes (inherited from river's matching semantics):
 
@@ -372,6 +373,15 @@ Accessibility) for whatever starts it — for now the terminal you run
   app. With Ghostty this goes through AppleScript, so macOS asks once
   to allow controlling Ghostty. `terminal` and `launcher` run through
   `sh -c`, so they may quote arguments.
+- **Launcher and menus:** `menu` defaults to
+  [choose](https://github.com/chipsenkbeil/choose) (`brew install
+  choose-gui`; the Nix module installs and themes it). Without a
+  `launcher`, Mod-p lists the apps in `/Applications`,
+  `/System/Applications` and `~/Applications` (and their subfolders) in
+  it and opens the one you pick (`launch <app>`); Mod-a lists your
+  actions. wimy adds the Homebrew (`/opt/homebrew/bin`,
+  `/usr/local/bin`) and Nix profile folders to its `PATH`, which
+  launchd leaves bare, so programs installed either way are found.
 - **Views:** macOS has no way to hide one window of an app, so windows
   of views that aren't shown are parked in a corner of their screen
   (bottom-right, or bottom-left when another screen is to the right),

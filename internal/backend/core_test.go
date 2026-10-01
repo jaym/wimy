@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -147,6 +148,7 @@ func TestPromptFollowUp(t *testing.T) {
 		{command.PromptView, "web\n", false, "view web"},
 		{command.PromptMoveTo, " 3 ", false, "moveto 3"},
 		{command.PromptAction, "lock", false, "action lock"},
+		{command.PromptApp, "Visual Studio Code\n", false, "launch Visual Studio Code"},
 		{command.PromptView, "web", true, ""},   // menu canceled (non-zero exit)
 		{command.PromptView, "  \n", false, ""}, // empty answer
 	}
@@ -227,5 +229,57 @@ func TestDrainQueueIf(t *testing.T) {
 	}
 	if got := queued(c); !slices.Equal(got, []string{"view web", "view 2"}) {
 		t.Errorf("queue = %v, want the other commands kept, in order", got)
+	}
+}
+
+func TestPromptMenuRunsThroughShell(t *testing.T) {
+	// the menu command line may quote arguments (a font name with spaces)
+	dir := t.TempDir()
+	menu := filepath.Join(dir, "menu")
+	script := "#!/bin/sh\ncat >/dev/null\nprintf '%s|%s|%s' \"$1\" \"$2\" \"$4\" > '" + filepath.Join(dir, "args") + "'\necho web\n"
+	if err := os.WriteFile(menu, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Default()
+	cfg.Menu = "'" + menu + "' -f \"Meslo Nerd Font\""
+	c, p := newTestCore(t, cfg)
+	if err := c.Prompt(command.PromptView, []string{"1", "web"}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "prompt answer to be queued", func() bool { return p.wakes.Load() == 1 })
+	b, err := os.ReadFile(filepath.Join(dir, "args"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(b), "-f|Meslo Nerd Font|go to tag: "; got != want {
+		t.Errorf("menu args = %q, want %q", got, want)
+	}
+}
+
+func TestSpawnMenuWithoutLauncherPromptsForApps(t *testing.T) {
+	if appDirs() == nil {
+		t.Skip("no application folders on this platform")
+	}
+	dir := t.TempDir()
+	menu := filepath.Join(dir, "menu")
+	// records the choices and the label, picks nothing
+	script := "#!/bin/sh\ncat > '" + filepath.Join(dir, "choices") + "'\nprintf '%s' \"$2\" > '" + filepath.Join(dir, "label") + "'\nexit 1\n"
+	if err := os.WriteFile(menu, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Default()
+	cfg.Launcher = ""
+	cfg.Menu = menu
+	c, _ := newTestCore(t, cfg)
+	if err := c.SpawnMenu(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the app prompt", func() bool {
+		b, err := os.ReadFile(filepath.Join(dir, "label"))
+		return err == nil && string(b) == "run: "
+	})
+	b, _ := os.ReadFile(filepath.Join(dir, "choices"))
+	if !strings.Contains(string(b), "Safari\n") {
+		t.Errorf("app choices lack Safari:\n%s", b)
 	}
 }

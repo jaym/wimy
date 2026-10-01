@@ -104,6 +104,14 @@ var (
 // New creates the macOS backend. notify is called on the main thread
 // after every apply pass; it must not block.
 func New(cfg *config.Config, configArg string, notify func()) *Backend {
+	// launchd gives the login agent a bare PATH: find Homebrew and Nix
+	// programs (choose, terminals, action scripts) too
+	home, _ := os.UserHomeDir()
+	name := os.Getenv("USER")
+	if u, err := user.Current(); err == nil {
+		name = u.Username
+	}
+	os.Setenv("PATH", loginPath(os.Getenv("PATH"), home, name))
 	b := &Backend{
 		applied:   newFrames(),
 		known:     make(map[wm.WindowID]bool),

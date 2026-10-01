@@ -42,9 +42,14 @@ let
     cp ${pkgs.writeText "extra.sh" bar.extraConfig} $out/extra.sh
   '';
 
-  # wimy's own config: bar-gap first, so the user's settings can override it
+  menuOn = isDarwin && cfg.menu.enable;
+  kdlString = s: "\"" + lib.escape [ "\\" "\"" ] s + "\"";
+
+  # wimy's own config: the module's lines first, so the user's settings
+  # can override them
   configText =
-    lib.optionalString barOn "// reserved for SketchyBar (programs.wimy.sketchybar.height)\nbar-gap ${toString bar.height}\n"
+    lib.optionalString menuOn "// the choose picker (programs.wimy.menu)\nmenu ${kdlString cfg.menu.command}\n"
+    + lib.optionalString barOn "// reserved for SketchyBar (programs.wimy.sketchybar.height)\nbar-gap ${toString bar.height}\n"
     + lib.optionalString (builtins.isString cfg.settings) cfg.settings;
 in
 {
@@ -75,6 +80,29 @@ in
       type = lib.types.str;
       default = "${config.home.homeDirectory}/Applications";
       description = "Where Wimy.app is installed on macOS.";
+    };
+
+    menu = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          macOS: install choose (a dmenu-style picker) and make it wimy's
+          `menu`: the app picker (Mod-p), the action menu (Mod-a) and the
+          view prompts. wimy runs as a launchd agent without your PATH,
+          so the command names it by its store path.
+        '';
+      };
+      command = lib.mkOption {
+        type = lib.types.str;
+        default = "${pkgs.choose-gui}/bin/choose -n 12 -w 40 -s 16 -u -c 8aadf4 -b 363a4f -f ${lib.escapeShellArg cfg.sketchybar.font.family}";
+        defaultText = lib.literalExpression ''"''${pkgs.choose-gui}/bin/choose -n 12 -w 40 -s 16 -u -c 8aadf4 -b 363a4f -f '<bar font>'"'';
+        description = ''
+          The menu command line (run through sh -c; wimy appends `-p
+          <label>` and feeds the choices on stdin). Catppuccin Macchiato
+          colors and the bar's font by default.
+        '';
+      };
     };
 
     windowCornerRadius = lib.mkOption {
@@ -171,6 +199,7 @@ in
         home.packages = lib.optional (bar.font.package != null) bar.font.package;
         targets.darwin.defaults.NSGlobalDomain._HIHideMenuBar = lib.mkIf bar.hideMenuBar true;
       })
+      (lib.mkIf menuOn { home.packages = [ pkgs.choose-gui ]; })
       (lib.mkIf (isDarwin && cfg.windowCornerRadius != null) {
         targets.darwin.defaults.NSGlobalDomain.NSConvolutionOverride1 = cfg.windowCornerRadius;
       })

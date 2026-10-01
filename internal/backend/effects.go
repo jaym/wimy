@@ -32,7 +32,12 @@ func (c *Core) SpawnTerminal() error {
 }
 
 // SpawnMenu starts the configured program launcher through sh -c.
+// Without one, on macOS, it prompts for an application in the menu
+// program and launches the answer.
 func (c *Core) SpawnMenu() error {
+	if strings.TrimSpace(c.Cfg.Launcher) == "" && appDirs() != nil {
+		return c.Prompt(command.PromptApp, listApps(appDirs()))
+	}
 	return c.spawnShell("launcher", c.Cfg.Launcher)
 }
 
@@ -47,10 +52,12 @@ func (c *Core) spawnShell(what, cmdline string) error {
 // choices and feeds the answer back as a command. It runs
 // asynchronously; canceling the menu does nothing.
 func (c *Core) Prompt(kind command.PromptKind, choices []string) error {
-	argv := strings.Fields(c.Cfg.Menu)
-	if len(argv) == 0 {
+	if strings.TrimSpace(c.Cfg.Menu) == "" {
 		return fmt.Errorf("no menu program configured")
 	}
+	// through sh -c, like the launcher: the command line may quote
+	// arguments; the label follows as "$@"
+	argv := []string{"sh", "-c", c.Cfg.Menu + ` "$@"`, "sh"}
 	var label string
 	switch kind {
 	case command.PromptView:
@@ -59,6 +66,8 @@ func (c *Core) Prompt(kind command.PromptKind, choices []string) error {
 		label = "move to tag: "
 	case command.PromptAction:
 		label = "action: "
+	case command.PromptApp:
+		label = "run: "
 	}
 	if label != "" {
 		argv = append(argv, "-p", label)
@@ -93,6 +102,8 @@ func promptFollowUp(kind command.PromptKind, out string, failed bool) (string, b
 		return "moveto " + answer, true
 	case command.PromptAction:
 		return "action " + answer, true
+	case command.PromptApp:
+		return "launch " + answer, true
 	}
 	return "", false
 }

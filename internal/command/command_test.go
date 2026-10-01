@@ -15,6 +15,7 @@ type fakeFx struct {
 	quit          bool
 	reloaded      bool
 	restarted     bool
+	launched      string
 }
 
 func (f *fakeFx) Spawn(argv []string) error { return nil }
@@ -26,6 +27,10 @@ func (f *fakeFx) Kill(id wm.WindowID)       { f.killed = id }
 func (f *fakeFx) Quit()                     { f.quit = true }
 func (f *fakeFx) Reload() error             { f.reloaded = true; return nil }
 func (f *fakeFx) Restart() error            { f.restarted = true; return nil }
+func (f *fakeFx) LaunchApp(name string) error {
+	f.launched = name
+	return nil
+}
 func (f *fakeFx) Prompt(kind PromptKind, choices []string) error {
 	f.promptKind = kind
 	f.promptChoices = choices
@@ -134,5 +139,20 @@ func TestRestartCommand(t *testing.T) {
 	}
 	if !fx.restarted {
 		t.Errorf("restart did not reach the effects")
+	}
+}
+
+func TestLaunchJoinsTheAppName(t *testing.T) {
+	env, fx := newTestEnv()
+	r := New(env)
+	// commands split on spaces; an app name may have them
+	if err := r.Run("launch Visual Studio Code"); err != nil {
+		t.Fatal(err)
+	}
+	if fx.launched != "Visual Studio Code" {
+		t.Errorf("launched %q", fx.launched)
+	}
+	if err := r.Run("launch"); err == nil {
+		t.Errorf("launch without a name: no error")
 	}
 }

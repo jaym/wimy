@@ -6,13 +6,14 @@ import "os"
 
 // platformDefaults are the macOS defaults. Mod is Option: Cmd would
 // collide with every application's shortcuts. The terminal is the
-// best one installed (see pickMacTerminal). The launcher is
-// provisional; menu is choose-gui (brew install choose-gui).
+// best one installed (see pickMacTerminal). No launcher: Mod-p lists
+// the installed applications in the menu program, choose-gui (brew
+// install choose-gui, or the Nix home-manager module).
 var platformDefaults = osDefaults{
 	mod:      "Mod1",
 	modMask:  Mod1,
 	terminal: pickMacTerminal(appExists, homeDir()),
-	launcher: "open -a Spotlight",
+	launcher: "",
 	menu:     "choose",
 	macOS:    true,
 }

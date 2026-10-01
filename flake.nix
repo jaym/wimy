@@ -88,6 +88,7 @@
             files=${hmCheck.config.home-files}
             set -x
             grep -qx 'bar-gap 30' $files/.config/wimy/config.kdl
+            grep -q '^menu "/nix/store/.*-choose-gui-.*/bin/choose .*-f '"'"'MesloLGM Nerd Font'"'"'"$' $files/.config/wimy/config.kdl
             grep -qx 'terminal "open -na Ghostty"' $files/.config/wimy/config.kdl
             grep -qx 'BAR_HEIGHT=30' $files/.config/sketchybar/settings.sh
             grep -q 'Wimy.app/Contents/MacOS/wimyctl' $files/.config/sketchybar/settings.sh

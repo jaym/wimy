@@ -236,7 +236,14 @@ go generate ./internal/proto
 - launchd agents (SketchyBar and its plugins) get neither `TMPDIR` nor a
   usable `PATH` (unexpanded `$HOME`/`$USER` entries), and nix-darwin
   agents may lack `HOME`: hence the `/tmp/wimy-<uid>/` socket, and
-  `/usr/bin/jq` in the plugin.
+  `/usr/bin/jq` in the plugin. wimy's own login agent gets
+  `/usr/bin:/bin:/usr/sbin:/sbin` only, so it adds the Homebrew and Nix
+  profile folders to its PATH at start (`loginPath`).
+- Mod-p without a `launcher` (the macOS default) lists `.app` bundles in
+  the `menu` program and runs `launch <name>` (`open -a`); the menu runs
+  through `sh -c` with `-p <label>` appended as `"$@"`. Don't drive the
+  choose picker with synthetic key events in tests: if it has closed,
+  the keys land in whatever has focus.
 - Native tabs (Ghostty, Terminal, Finder) are separate windows, but
   `kAXWindowsAttribute` lists only each group's visible tab: a tab
   switch makes one window leave the list and another join it, with no

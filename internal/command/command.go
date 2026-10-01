@@ -23,6 +23,8 @@ const (
 	PromptMoveTo
 	// PromptAction asks for the name of an action to run (Mod-a).
 	PromptAction
+	// PromptApp asks for an application to start (Mod-p on macOS).
+	PromptApp
 )
 
 // Effects are the side effects a command may trigger. They are
@@ -36,6 +38,8 @@ type Effects interface {
 	SpawnTerminal() error
 	// SpawnMenu starts the configured program launcher (Mod-p).
 	SpawnMenu() error
+	// LaunchApp starts (or brings up) the named application (macOS).
+	LaunchApp(name string) error
 	// Prompt asks the user to choose or enter a string, using the
 	// configured menu program. choices are suggestions; free-form
 	// input is allowed.
@@ -98,6 +102,7 @@ func New(env *Env) *Registry {
 		"spawn-terminal":     func(e *Env, _ []string) error { return e.Fx.SpawnTerminal() },
 		"spawn-menu":         func(e *Env, _ []string) error { return e.Fx.SpawnMenu() },
 		"action":             cmdAction,
+		"launch":             cmdLaunch,
 		"reload":             func(e *Env, _ []string) error { return e.Fx.Reload() },
 		"quit":               func(e *Env, _ []string) error { e.Fx.Quit(); return nil },
 	}
@@ -298,6 +303,15 @@ func cmdSpawn(e *Env, args []string) error {
 		return fmt.Errorf("usage: spawn <command> [args...]")
 	}
 	return e.Fx.Spawn(args)
+}
+
+// cmdLaunch starts the application named by its arguments, joined
+// back with spaces (commands split on them; app names have them).
+func cmdLaunch(e *Env, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: launch <application>")
+	}
+	return e.Fx.LaunchApp(strings.Join(args, " "))
 }
 
 func cmdAction(e *Env, args []string) error {

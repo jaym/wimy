@@ -300,6 +300,8 @@ converting sway-style `output … scale …` lines.
 
 ## macOS (work in progress)
 
+![wimy on macOS: three tiled Ghostty windows with wimy's titlebars, and the SketchyBar bar showing views, column mode and status](docs/macos.png)
+
 A macOS backend is being built (`plans/macos-port.md`).
 
 **Install and update:**

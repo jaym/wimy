@@ -140,14 +140,20 @@ static void register_window_notes(uint32_t wid, int retry) {
 	}
 }
 
-static void track_window(pid_t pid, AXUIElementRef win) {
+// track_window starts tracking an app's window (reporting it to the
+// backend) unless it already is, and returns its index in wins, or -1
+// if it isn't a window. A window can first show up as a focused one: a
+// background tab from before wimy started (the backend pairs it with
+// its tab).
+static int track_window(pid_t pid, AXUIElementRef win) {
 	CGWindowID wid = 0;
-	if (_AXUIElementGetWindow(win, &wid) != kAXErrorSuccess || wid == 0) return;
-	if (find_win(wid) >= 0) return;
+	if (_AXUIElementGetWindow(win, &wid) != kAXErrorSuccess || wid == 0) return -1;
+	int i = find_win(wid);
+	if (i >= 0) return i;
 	char *role = copy_str(win, kAXRoleAttribute);
 	int is_window = strcmp(role, "AXWindow") == 0;
 	free(role);
-	if (!is_window) return;
+	if (!is_window) return -1;
 
 	if (nwins == capwins) {
 		capwins = capwins ? capwins * 2 : 32;
@@ -156,6 +162,11 @@ static void track_window(pid_t pid, AXUIElementRef win) {
 	wins[nwins++] = (tracked_win){wid, pid, (AXUIElementRef)CFRetain(win), 0};
 	register_window_notes(wid, 1);
 	report_window(find_win(wid), 0);
+	return find_win(wid); // reporting can't untrack it, but stay safe
+}
+
+static int app_active(pid_t pid) {
+	return [NSRunningApplication runningApplicationWithProcessIdentifier:pid].active;
 }
 
 static void untrack_at(int i) {
@@ -170,16 +181,13 @@ static void observer_cb(AXObserverRef obs, AXUIElementRef el, CFStringRef note, 
 		pid_t pid = 0;
 		AXUIElementGetPid(el, &pid);
 		track_window(pid, el);
-	} else if (CFEqual(note, kAXFocusedWindowChangedNotification)) {
-		int i = find_el(el);
-		if (i < 0) {
-			// a background tab from before wimy started, shown for the
-			// first time: track it (the backend pairs it with its tab)
-			pid_t pid = 0;
-			AXUIElementGetPid(el, &pid);
-			track_window(pid, el);
-			i = find_el(el);
-		}
+	} else if (CFEqual(note, kAXFocusedWindowChangedNotification) || CFEqual(note, kAXMainWindowChangedNotification)) {
+		// some apps (Ghostty) only post the main window change, for
+		// switching windows and tabs alike; the backend ignores repeats
+		pid_t pid = 0;
+		AXUIElementGetPid(el, &pid);
+		if (CFEqual(note, kAXMainWindowChangedNotification) && !app_active(pid)) return;
+		int i = track_window(pid, el);
 		if (i >= 0) goFocusChanged(wins[i].wid, wins[i].pid);
 	} else if (CFEqual(note, kAXWindowMiniaturizedNotification)) {
 		int i = find_el(el);
@@ -238,6 +246,7 @@ static void watch_pid(pid_t pid, int attempts, int64_t delay_ms) {
 		return;
 	}
 	AXObserverAddNotification(obs, app, kAXFocusedWindowChangedNotification, NULL);
+	AXObserverAddNotification(obs, app, kAXMainWindowChangedNotification, NULL);
 	CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), kCFRunLoopDefaultMode);
 	if (napps == capapps) {
 		capapps = capapps ? capapps * 2 : 32;
@@ -330,17 +339,18 @@ void wimy_schedule_apply_after(int ms) {
 	});
 }
 
-// focused_wid returns the tracked window an app has focused, or 0.
+// focused_wid returns the window an app has focused (tracking it if
+// it isn't yet, like a background tab shown since), or 0.
 static uint32_t focused_wid(pid_t pid) {
 	AXUIElementRef app = AXUIElementCreateApplication(pid);
 	AXUIElementSetMessagingTimeout(app, 1.0);
 	CFTypeRef win = NULL;
-	CGWindowID wid = 0;
+	int i = -1;
 	if (AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute, &win) == kAXErrorSuccess && win)
-		_AXUIElementGetWindow((AXUIElementRef)win, &wid);
+		i = track_window(pid, (AXUIElementRef)win);
 	if (win) CFRelease(win);
 	CFRelease(app);
-	return (wid && find_win(wid) >= 0) ? wid : 0;
+	return i >= 0 ? wins[i].wid : 0;
 }
 
 int wimy_app_windows(int pid, uint32_t *out, int max) {

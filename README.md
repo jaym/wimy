@@ -334,7 +334,10 @@ Every switch installs `~/Applications/Wimy.app` (and `wimyctl` in
 [SketchyBar](contrib/macos/sketchybar/) with wimy's views and column
 mode, its Nerd Font, the native menu bar auto-hidden, and `bar-gap`
 matching the bar (`programs.wimy.sketchybar.height`, `.extraConfig` for
-your own items, `.font`, `.hideMenuBar`). Set
+your own items, `.font`, `.hideMenuBar`), and squares every app's
+window corners to match wimy's borders (`programs.wimy.windowCornerRadius`,
+default 1; 10 is the pre-Tahoe look; apps pick it up when they start).
+Set
 `programs.wimy.sketchybar.enable = false` to configure the bar yourself,
 and `programs.wimy.settings = null` to manage `config.kdl` yourself (for
 instance as an out-of-store link, for live `wimyctl run reload` edits).

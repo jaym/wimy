@@ -82,7 +82,9 @@
         // lib.optionalAttrs (pkgs.stdenv.hostPlatform.isDarwin && self.packages.${pkgs.stdenv.hostPlatform.system} ? wimy) {
           # the bundled SketchyBar: bar config installed, wimy's bar-gap
           # matches the bar, the user's settings come after it
-          hm-sketchybar = pkgs.runCommand "wimy-hm-sketchybar-check" { } ''
+          hm-sketchybar =
+            assert hmCheck.config.targets.darwin.defaults.NSGlobalDomain.NSConvolutionOverride1 == 1;
+            pkgs.runCommand "wimy-hm-sketchybar-check" { } ''
             files=${hmCheck.config.home-files}
             set -x
             grep -qx 'bar-gap 30' $files/.config/wimy/config.kdl

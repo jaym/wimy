@@ -10,7 +10,9 @@
 # programs.sketchybar) with wimy's bar config from
 # contrib/macos/sketchybar, its Nerd Font, the native menu bar hidden,
 # and wimy's bar-gap set to the bar's height. sketchybar.enable = false
-# leaves all of that to you.
+# leaves all of that to you. Window corners are squared to match wimy's
+# borders (windowCornerRadius; home-manager writes the global default,
+# no nix-darwin needed).
 # Linux: installs the package; start it from river (`river -c wimy`).
 self:
 {
@@ -73,6 +75,21 @@ in
       type = lib.types.str;
       default = "${config.home.homeDirectory}/Applications";
       description = "Where Wimy.app is installed on macOS.";
+    };
+
+    windowCornerRadius = lib.mkOption {
+      type = lib.types.nullOr (lib.types.numbers.between 1 50);
+      default = 1;
+      example = 10;
+      description = ''
+        macOS: corner radius of every app's windows, in points (the
+        global `NSConvolutionOverride1` default). 1 is square, matching
+        wimy's borders (0 is ignored by macOS); 10 is the pre-Tahoe look,
+        26 Tahoe's. Apps pick it up when they start; log out and back in
+        for all of them. Chromium-based browsers ignore it. null leaves
+        the setting alone; to undo a value set before, run
+        `defaults delete -g NSConvolutionOverride1`.
+      '';
     };
 
     sketchybar = {
@@ -153,6 +170,9 @@ in
         launchd.agents.sketchybar.config.EnvironmentVariables.HOME = config.home.homeDirectory;
         home.packages = lib.optional (bar.font.package != null) bar.font.package;
         targets.darwin.defaults.NSGlobalDomain._HIHideMenuBar = lib.mkIf bar.hideMenuBar true;
+      })
+      (lib.mkIf (isDarwin && cfg.windowCornerRadius != null) {
+        targets.darwin.defaults.NSGlobalDomain.NSConvolutionOverride1 = cfg.windowCornerRadius;
       })
       (lib.mkIf isDarwin {
         home.activation.wimy = lib.hm.dag.entryAfter [ "writeBoundary" "linkGeneration" ] ''

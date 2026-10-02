@@ -226,6 +226,9 @@ be running (e.g. black screen, no bindings): a missing
 `river_window_manager_v1` global means the compositor is river-classic
 (0.3.x), not river 0.4+.
 
+If browser Save As / Open dialogs never appear, see
+[File dialogs and portals](#file-dialogs-and-portals).
+
 ## Launcher look (dmenu-style fuzzel)
 
 The default `launcher`/`menu` commands make fuzzel render as a bar
@@ -298,6 +301,37 @@ cp contrib/kanshi/config ~/.config/kanshi/config   # then edit
 and add `exec "kanshi"` to the `autostart` block of `config.kdl`.
 See [`contrib/kanshi/config`](contrib/kanshi/config) for examples
 converting sway-style `output … scale …` lines.
+
+## File dialogs and portals
+
+Browsers (Firefox, Chromium) open their Save As / Open dialogs through
+`xdg-desktop-portal`, which starts `xdg-desktop-portal-gtk` as a
+D-Bus/systemd user service. river gives `WAYLAND_DISPLAY` to its init
+script, but not to the systemd user environment those services start
+in, so the GTK backend exits with `cannot open display:` and the dialog
+never appears. Pass the variables on before starting wimy, in
+`~/.config/river/init`:
+
+```sh
+#!/bin/sh
+export XDG_CURRENT_DESKTOP=river
+export XDG_SESSION_DESKTOP=river
+dbus-update-activation-environment --systemd \
+	WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE
+exec wimy
+```
+
+Install `xdg-desktop-portal` and `xdg-desktop-portal-gtk` (file
+chooser); `xdg-desktop-portal-wlr` adds screen sharing and screenshots
+(its `UseIn` lists `river`, hence `XDG_CURRENT_DESKTOP=river`). To fix
+a session that is already running:
+
+```sh
+dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=river
+systemctl --user restart xdg-desktop-portal xdg-desktop-portal-gtk
+```
+
+`journalctl --user -u xdg-desktop-portal-gtk` shows the backend's errors.
 
 ## macOS (work in progress)
 

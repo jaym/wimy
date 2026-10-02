@@ -106,6 +106,35 @@ func TestTitlebarOff(t *testing.T) {
 	}
 }
 
+// TestTitlebarFont covers the font family list property and its
+// default.
+func TestTitlebarFont(t *testing.T) {
+	load := func(text string) (*Config, error) {
+		p := filepath.Join(t.TempDir(), "config.kdl")
+		if err := os.WriteFile(p, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return Load(p)
+	}
+	c, err := load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Titlebar.Font != "sans-serif" {
+		t.Errorf("default font: %q, want sans-serif", c.Titlebar.Font)
+	}
+	c, err = load("titlebar font=\"Iosevka, sans-serif\"\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Titlebar.Font != "Iosevka, sans-serif" {
+		t.Errorf("font: %q", c.Titlebar.Font)
+	}
+	if _, err = load("titlebar font=12\n"); err == nil {
+		t.Error("non-string font should not parse")
+	}
+}
+
 func TestLoadMissingDefaultPathOK(t *testing.T) {
 	c, err := Load(filepath.Join(t.TempDir(), "nonexistent.kdl"))
 	if err == nil {

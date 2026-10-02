@@ -29,7 +29,8 @@ internal/river     (Linux) river protocol backend: manage/render sequences,
 internal/rpc       JSON-RPC 2.0 server + client helpers, state snapshots
 internal/command   command registry shared by keybindings, RPC, config
 internal/config    KDL config loading/validation + defaults
-internal/titlebar  pure-Go titlebar pixel renderer (x/image/font, shm)
+internal/titlebar  pure-Go titlebar pixel renderer (go-text/typesetting
+                   shaping + font fallback, wl_shm)
 internal/proto     generated protocol bindings (wlclgen) — DO NOT EDIT gen.go
 protocol/          vendored protocol XML (river at pinned commit, wayland,
                    wlr virtual keyboard for tests)
@@ -49,7 +50,7 @@ gofmt -l cmd internal   # must print nothing (except gen.go is fine)
 ./e2e-multi.sh  #  7 checks: multi-output behavior
 ./e2e-keys.sh   #  6 checks: REAL key events → bindings (virtual keyboard)
 ./e2e-layer.sh  #  5 checks: layer shell (fuzzel survives, focus events)
-./e2e-deco.sh   #  7 checks: decorations (use_ssd, titlebars, clips)
+./e2e-deco.sh   #  9 checks: decorations (use_ssd, titlebars, clips)
 ./e2e-mouse.sh  # 14 checks: pointer drags (virtual pointer), grow binding
 ./e2e-reload.sh # 22 checks: hot config reload (bindings, titlebar, autostart)
 ./e2e-all.sh    # builds bin/ and runs all seven suites

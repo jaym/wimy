@@ -32,7 +32,10 @@ border width=2 focused="#8aadf4" normal="#363a4f"
 // Titlebars drawn by wimy above each window (wmii-style: slim bar
 // with the window title; stack-mode strips are these titlebars).
 // `titlebar "off"` gives dwm-style border-only decorations.
-titlebar height=22 focused-bg="#8aadf4" focused-fg="#1e2030" normal-bg="#24273a" normal-fg="#a5adcb"
+// font is a comma-separated family list; runes no listed family
+// covers fall back to any installed font, so CJK, emoji, Arabic etc.
+// render correctly.
+titlebar height=22 font="sans-serif" focused-bg="#8aadf4" focused-fg="#1e2030" normal-bg="#24273a" normal-fg="#a5adcb"
 
 // Height in pixels of unfocused window strips in stack mode
 // (only used when titlebars are off).

@@ -12,7 +12,7 @@
 buildGoModule {
   pname = "wimy";
   inherit version src;
-  vendorHash = "sha256-c4HJ0IT1jelrs8WhRwVyoOQ9w2bkqAmqyBsNQIggJOo=";
+  vendorHash = "sha256-lL96IOqdkgicnARFiK1CMZeSwXXAahd3x1F03Ae0vbo=";
   subPackages = [
     "cmd/wimy"
     "cmd/wimyctl"

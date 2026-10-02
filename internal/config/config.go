@@ -65,9 +65,12 @@ type Border struct {
 }
 
 // Titlebar settings. Height 0 disables titlebars (dwm-style: border
-// only).
+// only). Font is a comma-separated fontconfig-style family list for
+// the title text ("Iosevka, sans-serif"); runes no listed family
+// covers fall back to any installed font.
 type Titlebar struct {
 	Height    int32
+	Font      string
 	FocusedBg Color
 	FocusedFg Color
 	NormalBg  Color
@@ -156,6 +159,7 @@ func Default() *Config {
 	c.Border.Focused, _ = ParseColor("#8aadf4")
 	c.Border.Normal, _ = ParseColor("#363a4f")
 	c.Titlebar.Height = 22
+	c.Titlebar.Font = "sans-serif"
 	c.Titlebar.FocusedBg, _ = ParseColor("#8aadf4")
 	c.Titlebar.FocusedFg, _ = ParseColor("#1e2030")
 	c.Titlebar.NormalBg, _ = ParseColor("#24273a")
@@ -424,6 +428,13 @@ func (c *Config) applyNode(n *document.Node) error {
 				return fmt.Errorf("titlebar height: want a non-negative integer")
 			}
 			c.Titlebar.Height = int32(h)
+		}
+		if p, ok := prop(n, "font"); ok {
+			s, ok := p.Value.(string)
+			if !ok {
+				return fmt.Errorf("titlebar font: want a string")
+			}
+			c.Titlebar.Font = s
 		}
 
 	case "border":

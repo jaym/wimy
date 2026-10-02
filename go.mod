@@ -3,6 +3,7 @@ module wimy
 go 1.26.5
 
 require (
+	github.com/go-text/typesetting v0.3.4
 	github.com/sblinch/kdl-go v0.0.0-20260121213736-8b7053306ca6
 	golang.org/x/image v0.44.0
 	golang.org/x/sys v0.41.0

@@ -24,6 +24,10 @@ wimy — a separate client process speaking the stable
   waybar, …) work; bars with exclusive zones reserve space, launchers
   with exclusive keyboard focus dim window borders until dismissed.
 - **KDL configuration** with comments; external bar and launcher.
+- **Unicode-correct titlebars**: window titles in any script — CJK,
+  emoji, Arabic/Hebrew (RTL), Indic — shaped with
+  [go-text/typesetting](https://github.com/go-text/typesetting), with
+  automatic font fallback (no tofu boxes).
 - Pure Go on Linux (no cgo) via [wlcl](https://codeberg.org/vyivel/wlcl).
 
 ## Installing on Arch Linux
@@ -249,14 +253,19 @@ Tag/action prompts get labeled input (`go to tag: `, `action: `).
 
 wimy draws wmii-style slim **titlebars** itself (pure-Go renderer,
 `river_decoration_v1` surfaces): a bar with the window title, accent
-colored when focused. Clients are told to use server-side decorations
+colored when focused. Title text is shaped with
+[go-text/typesetting](https://github.com/go-text/typesetting) and
+fontconfig-style font fallback, so CJK, emoji, Arabic, Indic and
+mixed-script titles render with real glyphs instead of tofu boxes.
+Clients are told to use server-side decorations
 (`use_ssd`), so their own fat CSD titlebars disappear; clients that
 insist on CSD (some GTK apps) keep theirs and get no wimy titlebar.
 
 - Stack mode collapsed strips are the titlebars themselves.
 - `titlebar "off"` in config.kdl gives dwm-style border-only
-  decorations; `titlebar height=N` and the four colors are
-  configurable (see config.kdl).
+  decorations; `titlebar height=N`, the four colors and the title
+  `font` (family list, default `sans-serif`) are configurable (see
+  config.kdl).
 - Borders are compositor-drawn; with a titlebar the top border is
   omitted (the titlebar frame covers it).
 

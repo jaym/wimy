@@ -1,16 +1,24 @@
 // Package titlebar renders wmii-style window titlebars in pure Go:
 // a slim bar with the window title, focused/normal colors and a border
 // frame matching the compositor-drawn window borders.
+//
+// Text is shaped with go-text/typesetting (a HarfBuzz port) over a
+// fontconfig-style font map with per-rune fallback, so titles in any
+// script — CJK, Arabic, Indic, emoji — render with real glyphs instead
+// of tofu boxes.
 package titlebar
 
 import (
 	"image"
 	"image/color"
+	"log"
 	"os"
+	"slices"
+	"sort"
 
-	"golang.org/x/image/font"
-	"golang.org/x/image/font/basicfont"
-	"golang.org/x/image/font/opentype"
+	"github.com/go-text/typesetting/di"
+	"github.com/go-text/typesetting/fontscan"
+	"github.com/go-text/typesetting/shaping"
 	"golang.org/x/image/math/fixed"
 )
 
@@ -22,77 +30,73 @@ type Colors struct {
 	BorderNormal         color.RGBA
 }
 
-// Renderer renders titlebar images.
+// Renderer renders titlebar images. It is not safe for concurrent
+// use; titlebar rendering happens on the Wayland dispatch goroutine.
 type Renderer struct {
 	Height int32 // logical pixels
 	Colors Colors
 	Border int32 // border width in logical pixels
 
-	fontData []byte // nil: use the built-in fallback font
-	faces    map[int32]font.Face
+	fontMap   *fontscan.FontMap
+	segmenter shaping.Segmenter
+	shaper    shaping.HarfbuzzShaper
+	wrapper   shaping.LineWrapper
+	drawer    glyphDrawer
 }
 
-// fontCandidates are tried in order; the first that parses wins.
-var fontCandidates = []string{
-	"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",     // Debian/Ubuntu
-	"/usr/share/fonts/dejavu/DejaVuSans.ttf",              // Arch
-	"/usr/share/fonts/TTF/DejaVuSans.ttf",                 // Fedora
-	"/usr/share/fonts/dejavu-sans/DejaVuSans.ttf",         // openSUSE
-	"/usr/share/fonts/noto/NotoSans-Regular.ttf",          // Arch noto
-	"/usr/share/fonts/noto-sans/NotoSans-Regular.ttf",     // Fedora noto
-	"/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", // Debian noto
-	// macOS: SF (the system UI font) parses with x/image/opentype; the
-	// .ttc collections (Helvetica) don't.
-	"/System/Library/Fonts/SFNS.ttf",
-	"/System/Library/Fonts/Supplemental/Arial.ttf",
-	"/Library/Fonts/Arial Unicode.ttf",
-}
-
-// New returns a Renderer. A sans-serif system font is used if found,
-// otherwise a small built-in bitmap font.
-func New(height int32, colors Colors, borderWidth int32) *Renderer {
-	r := &Renderer{
-		Height: height,
-		Colors: colors,
-		Border: borderWidth,
-		faces:  make(map[int32]font.Face),
-	}
-	for _, p := range fontCandidates {
-		data, err := os.ReadFile(p)
-		if err != nil {
-			continue
-		}
-		if _, err := opentype.Parse(data); err == nil {
-			r.fontData = data
-			break
-		}
+// New returns a Renderer using the system fonts. families is the
+// fontconfig-style family list (first match wins, e.g. "Iosevka",
+// "sans-serif"); fallback to any installed font covering a rune is
+// automatic. If no fonts are found, bars are drawn without text (a
+// warning is logged) instead of failing.
+func New(height int32, colors Colors, borderWidth int32, families []string) *Renderer {
+	r := newRenderer(height, colors, borderWidth, families)
+	if err := r.fontMap.UseSystemFonts(""); err != nil {
+		log.Printf("titlebar: system font scan failed, window titles will not be drawn: %v", err)
+	} else if r.fontMap.ResolveFace('A') == nil {
+		log.Printf("titlebar: no usable fonts found, window titles will not be drawn")
 	}
 	return r
 }
 
-// face returns the font face for the given output scale, creating and
-// caching it on first use.
-func (r *Renderer) face(scale int32) font.Face {
-	if scale < 1 {
-		scale = 1
+// quietLogger silences fontscan's per-rune fallback chatter; the
+// renderer degrades gracefully (fallback face, then no text) and New
+// reports the no-fonts case itself.
+type quietLogger struct{}
+
+func (quietLogger) Printf(string, ...interface{}) {}
+
+// newRenderer returns a Renderer with an empty font map. Tests add
+// fonts explicitly with addFontFile, keeping them hermetic.
+func newRenderer(height int32, colors Colors, borderWidth int32, families []string) *Renderer {
+	if len(families) == 0 {
+		families = []string{"sans-serif"}
 	}
-	if f, ok := r.faces[scale]; ok {
-		return f
+	// color emoji fonts are only reachable through the generic
+	// "emoji" family (fontconfig 45-generic.conf substitutions),
+	// so make sure every query ends with it
+	if !slices.Contains(families, fontscan.Emoji) {
+		families = append(slices.Clone(families), fontscan.Emoji)
 	}
-	var f font.Face
-	size := float64(r.Height-6) * float64(scale) // logical height minus padding
-	if r.fontData != nil {
-		if ttf, err := opentype.Parse(r.fontData); err == nil {
-			f, _ = opentype.NewFace(ttf, &opentype.FaceOptions{
-				Size: size, DPI: 72, Hinting: font.HintingFull,
-			})
-		}
+	fm := fontscan.NewFontMap(quietLogger{})
+	fm.SetQuery(fontscan.Query{Families: families})
+	return &Renderer{
+		Height:  height,
+		Colors:  colors,
+		Border:  borderWidth,
+		fontMap: fm,
 	}
-	if f == nil {
-		f = basicfont.Face7x13
+}
+
+// addFontFile registers the font file at path, under the given
+// family name (the font's own name when empty). The font map keeps
+// the file open and parses it on demand.
+func (r *Renderer) addFontFile(path, family string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
 	}
-	r.faces[scale] = f
-	return f
+	return r.fontMap.AddFont(f, path, family)
 }
 
 // Render renders a titlebar of the given logical width for the given
@@ -121,39 +125,89 @@ func (r *Renderer) Render(width, scale int32, title string, focused bool) []byte
 	}
 
 	// title text, vertically centered, ellipsized to fit
-	d := font.Drawer{
-		Dst:  img,
-		Src:  image.NewUniform(fg),
-		Face: r.face(scale),
-	}
 	pad := 6 * int(scale)
 	maxW := int(w) - 2*pad
-	if maxW > 0 {
-		title = ellipsize(&d, title, maxW)
-		metrics := d.Face.Metrics()
-		ascent := metrics.Ascent.Ceil()
-		descent := metrics.Descent.Ceil()
-		baseline := (int(h)-ascent-descent)/2 + ascent
-		d.Dot = fixed.P(pad, baseline)
-		d.DrawString(title)
+	if maxW > 0 && title != "" && r.fontMap.ResolveFace('A') != nil {
+		size := fixed.I(int(max(r.Height-6, 1) * scale)) // logical height minus padding
+		r.drawTitle(img, title, fg, pad, int(h), maxW, size)
 	}
 
 	return rgbaToBGRA(img)
 }
 
-// ellipsize truncates s with "…" until it fits maxW pixels.
-func ellipsize(d *font.Drawer, s string, maxW int) string {
-	if d.MeasureString(s).Ceil() <= maxW {
-		return s
+// drawTitle shapes title, truncates it with an ellipsis to fit maxW
+// device pixels and draws it into img, vertically centered in a bar
+// of h device pixels, starting at x = pad.
+func (r *Renderer) drawTitle(img *image.RGBA, title string, fg color.RGBA, pad, h, maxW int, size fixed.Int26_6) {
+	final, _ := r.shapeTitle(title, size, maxW)
+	if len(final) == 0 {
+		return
 	}
-	r := []rune(s)
-	for len(r) > 0 && d.MeasureString(string(r)+"…").Ceil() > maxW {
-		r = r[:len(r)-1]
+
+	// vertical centering on the tallest run metrics
+	ascent, descent := 0, 0
+	for _, run := range final {
+		ascent = max(ascent, run.LineBounds.Ascent.Ceil())
+		descent = max(descent, -run.LineBounds.Descent.Ceil())
 	}
-	if len(r) == 0 {
-		return ""
+	baseline := (h-ascent-descent)/2 + ascent
+
+	x := pad
+	for _, run := range final {
+		x = r.drawer.drawRun(img, run, fg, x, baseline)
 	}
-	return string(r) + "…"
+}
+
+// shapeTitle shapes title into a single line of runs in visual
+// order, truncating with "…" when wider than maxW device pixels. It
+// returns the runs to draw and the number of truncated runes.
+func (r *Renderer) shapeTitle(title string, size fixed.Int26_6, maxW int) (shaping.Line, int) {
+	text := []rune(title)
+	in := shaping.Input{
+		Text:      text,
+		RunStart:  0,
+		RunEnd:    len(text),
+		Direction: di.DirectionLTR,
+		Size:      size,
+	}
+
+	// split by bidi direction, script and font coverage, then shape
+	// each run with its resolved face
+	runs := r.segmenter.Split(in, r.fontMap)
+	line := make(shaping.Line, 0, len(runs))
+	for _, run := range runs {
+		if run.Face == nil {
+			continue
+		}
+		line = append(line, r.shaper.Shape(run))
+	}
+	if len(line) == 0 {
+		return nil, 0
+	}
+
+	// single line, truncated with "…" when the title is too wide
+	cfg := shaping.WrapConfig{
+		Direction:          line[0].Direction,
+		TruncateAfterLines: 1,
+		BreakPolicy:        shaping.WhenNecessary,
+	}
+	if face := r.fontMap.ResolveFace('…'); face != nil {
+		truncIn := shaping.Input{
+			Text:      []rune("…"),
+			RunEnd:    1,
+			Direction: line[0].Direction,
+			Face:      face,
+			Size:      size,
+		}
+		cfg = cfg.WithTruncator(&r.shaper, truncIn)
+	}
+	r.wrapper.Prepare(cfg, text, shaping.NewSliceIterator(line))
+	wrapped, _ := r.wrapper.WrapNextLine(maxW)
+	final := wrapped.Line
+
+	// drawing order is visual (left to right), not logical
+	sort.Slice(final, func(i, j int) bool { return final[i].VisualIndex < final[j].VisualIndex })
+	return final, wrapped.Truncated
 }
 
 func fill(img *image.RGBA, r image.Rectangle, c color.RGBA) {

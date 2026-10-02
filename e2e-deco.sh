@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 # End-to-end decoration test: SSD negotiation, titlebar creation,
-# border edges, stack-mode content clipping, focus re-render.
+# border edges, unicode titles, stack-mode content clipping, focus
+# re-render.
 set -u
 cd "$(dirname "$0")"
 go build -o bin/wimy ./cmd/wimy || exit 1
 RT=/tmp/wimy-deco-rt
 rm -rf "$RT"; mkdir -p "$RT"; chmod 700 "$RT"
 export XDG_RUNTIME_DIR="$RT" WLR_BACKENDS=headless WLR_RENDERER=pixman
+# hermetic font environment for the titlebar renderer: one known font
+# (OFL Noto Sans subset) via XDG_DATA_HOME, fresh fontscan index cache
+mkdir -p "$RT/data/fonts" "$RT/cache"
+cp internal/titlebar/testdata/NotoSans-ascii.ttf "$RT/data/fonts/"
+export XDG_DATA_HOME="$RT/data" XDG_CACHE_HOME="$RT/cache"
 cat > "$RT/config.kdl" <<'KDL'
 terminal "foot"
 KDL
@@ -30,6 +36,17 @@ check "use_ssd sent" "$(grep -c 'use_ssd' "$RT/wimy.log")" 1
 check "decoration created" "$(grep -c 'get_decoration_above' "$RT/wimy.log")" 1
 check "decoration synced+committed" "$([ "$(grep -c 'sync_next_commit' "$RT/wimy.log")" -ge 1 ] && echo yes)" yes
 check "border has no top edge with titlebar" "$(grep -c 'set_borders(14,' "$RT/wimy.log")" 1
+
+# unicode window title (CJK + emoji): the titlebar re-renders and
+# commits; the typesetting renderer logs no errors
+BEFORE=$(grep -c 'sync_next_commit' "$RT/wimy.log")
+ctl run "spawn foot --title 日本語テスト🎉" >/dev/null
+sleep 1.5
+AFTER=$(grep -c 'sync_next_commit' "$RT/wimy.log")
+check "unicode title rendered+committed" "$([ "$AFTER" -gt "$BEFORE" ] && echo yes)" yes
+check "no titlebar renderer errors" "$(grep -c 'titlebar:' "$RT/wimy.log")" 0
+ctl run 'kill' >/dev/null
+sleep 0.5
 
 # stack mode: collapsed windows get content clip, titlebars stay
 ctl run 'spawn foot' >/dev/null
